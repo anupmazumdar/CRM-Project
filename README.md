@@ -1,6 +1,8 @@
 # 🎓 XYZ College Admissions Management CRM
 
 > **A centralized, high-performance admissions pipeline and student relationship management platform for XYZ College**, replacing fragmented Excel sheets, WhatsApp groups, and email threads with live funnel analytics, role-based workflows, and automated follow-up tracking.
+>
+> 🌐 **Live Production URL:** [https://crm-project-kohl-gamma.vercel.app](https://crm-project-kohl-gamma.vercel.app)
 
 ---
 

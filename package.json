@@ -6,11 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "tsc --noEmit",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "test": "tsx scripts/test-e2e.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -19,7 +20,7 @@
     "date-fns": "^3.6.0",
     "jose": "^5.9.6",
     "lucide-react": "^0.460.0",
-    "next": "^14.2.18",
+    "next": "14.2.18",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.13.3",

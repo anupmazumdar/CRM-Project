@@ -3,7 +3,7 @@
 This document records the manual and automated validation results performed on the MVP.
 
 | Test Case ID | Scope | Verification Description | Input / Action | Expected Result | Status |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | **TC-01** | Authentication | Admin Login | `admin@college.edu` / `admin123` | Successful login, cookie issued, redirected to Dashboard with Admin controls | **PASS** |
 | **TC-02** | Authentication | Counsellor Login | `priya@college.edu` / `counsellor123` | Successful login, restricted navigation, only assigned leads visible | **PASS** |
 | **TC-03** | Validation | Invalid Email & Missing Contact | Email: `bad-format`, Phone: empty | Rejected with inline error: *"Please enter a valid email address"* | **PASS** |
@@ -20,6 +20,9 @@ This document records the manual and automated validation results performed on t
 | **TC-14** | Reporting | Channel ROI & SLA Compliance | Query `/api/reports` | Computes conversion rate, lead source breakdown, and follow-up on-time compliance rate | **PASS** |
 | **TC-15** | Export | CSV Download | Click "Export" in Leads list | Generates well-formatted CSV with all filtered student fields | **PASS** |
 
-### Automated Test Runner Execution
+## Automated Test Runner Execution
+
 All test cases were executed against the live production server via `npx tsx scripts/test-e2e.ts`.
+
 **Result:** 13/13 automated test suites passed (100% success rate).
+

@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
 
     // Aggregate Leads by Source
     const sourceMap: Record<string, number> = {};
-    leadsList.forEach((l) => {
+    leadsList.forEach((l: any) => {
       const src = l.source || 'Other';
       sourceMap[src] = (sourceMap[src] || 0) + 1;
     });
@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
         count,
         percentage: total > 0 ? Math.round((count / total) * 100) : 0,
       }))
-      .sort((a, b) => b.count - a.count);
+      .sort((a: any, b: any) => b.count - a.count);
 
     // Aggregate Leads by Status
     const statusColors: Record<string, string> = {
@@ -168,7 +168,7 @@ export async function GET(request: NextRequest) {
       monthlyMap[key] = { leads: 0, converted: 0 };
     }
 
-    leadsList.forEach((l) => {
+    leadsList.forEach((l: any) => {
       const d = new Date(l.createdAt);
       const key = `${months[d.getMonth()]} ${d.getFullYear()}`;
       if (monthlyMap[key]) {
@@ -187,11 +187,11 @@ export async function GET(request: NextRequest) {
 
     // Team Performance computation
     const userStatsMap: Record<string, { assigned: number; contacted: number; interested: number; converted: number }> = {};
-    usersList.forEach((u) => {
+    usersList.forEach((u: any) => {
       userStatsMap[u.id] = { assigned: 0, contacted: 0, interested: 0, converted: 0 };
     });
 
-    leadsList.forEach((l) => {
+    leadsList.forEach((l: any) => {
       if (l.assignedToId && userStatsMap[l.assignedToId]) {
         userStatsMap[l.assignedToId].assigned += 1;
         if (l.status === 'Contacted') userStatsMap[l.assignedToId].contacted += 1;
@@ -201,8 +201,8 @@ export async function GET(request: NextRequest) {
     });
 
     const teamPerformance = usersList
-      .filter((u) => session.role === 'ADMIN' || u.id === session.id)
-      .map((u) => {
+      .filter((u: any) => session.role === 'ADMIN' || u.id === session.id)
+      .map((u: any) => {
         const stats = userStatsMap[u.id] || { assigned: 0, contacted: 0, interested: 0, converted: 0 };
         const convRate = stats.assigned > 0 ? Math.round((stats.converted / stats.assigned) * 100) : 0;
         return {
@@ -215,16 +215,16 @@ export async function GET(request: NextRequest) {
           conversionRate: convRate,
         };
       })
-      .sort((a, b) => b.assigned - a.assigned);
+      .sort((a: any, b: any) => b.assigned - a.assigned);
 
     // Urgent Follow-ups (Overdue + Due Today)
     const urgentFollowUps = leadsList
-      .filter((l) => {
+      .filter((l: any) => {
         if (!l.nextFollowUpDate) return false;
         const s = getFollowUpStatus(l.nextFollowUpDate);
         return s === 'OVERDUE' || s === 'DUE_TODAY';
       })
-      .map((l) => {
+      .map((l: any) => {
         const fStatus = getFollowUpStatus(l.nextFollowUpDate);
         const target = new Date(l.nextFollowUpDate!);
         target.setHours(0, 0, 0, 0);
@@ -237,7 +237,7 @@ export async function GET(request: NextRequest) {
           daysDiff: diffDays,
         };
       })
-      .sort((a, b) => a.daysDiff - b.daysDiff)
+      .sort((a: any, b: any) => a.daysDiff - b.daysDiff)
       .slice(0, 10);
 
     return NextResponse.json({

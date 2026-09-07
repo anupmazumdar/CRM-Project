@@ -35,16 +35,16 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const teamStats = users.map((u) => {
+    const teamStats = users.map((u: any) => {
       const leads = u.assignedLeads || [];
       const assignedCount = leads.length;
-      const contactedCount = leads.filter((l) => l.status === 'Contacted').length;
-      const interestedCount = leads.filter((l) => l.status === 'Interested').length;
-      const convertedCount = leads.filter((l) => l.status === 'Converted').length;
-      const lostCount = leads.filter((l) => l.status === 'Lost').length;
+      const contactedCount = leads.filter((l: any) => l.status === 'Contacted').length;
+      const interestedCount = leads.filter((l: any) => l.status === 'Interested').length;
+      const convertedCount = leads.filter((l: any) => l.status === 'Converted').length;
+      const lostCount = leads.filter((l: any) => l.status === 'Lost').length;
       const conversionRate = assignedCount > 0 ? Math.round((convertedCount / assignedCount) * 100) : 0;
 
-      const overdueFollowUps = leads.filter((l) => {
+      const overdueFollowUps = leads.filter((l: any) => {
         if (!l.nextFollowUpDate) return false;
         return getFollowUpStatus(l.nextFollowUpDate) === 'OVERDUE';
       }).length;

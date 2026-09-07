@@ -3,7 +3,7 @@
 This log records every non-trivial product, architectural, and design decision made during the MVP development of XYZ College CRM, along with its justification.
 
 | Decision ID | Area | Decision Made | Rationale / Justification |
-|-------------|------|---------------|---------------------------|
+| --- | --- | --- | --- |
 | **DEC-001** | Tech Stack | Next.js 14 App Router + React + TypeScript + Tailwind CSS | Provides rapid unified full-stack development, server-side data fetching, strict typing, and high-performance UI rendering within the 6-day MVP scope. |
 | **DEC-002** | Database & ORM | Prisma ORM with SQLite default (configured for seamless PostgreSQL swap) | SQLite allows zero-friction, one-command setup (`npm run db:push && npm run db:seed`) for reviewers and local testing without Docker/cloud DB prerequisites, while Prisma makes production Postgres migration trivial. |
 | **DEC-003** | Auth System | Custom JWT session with HTTP-only cookies + bcryptjs | Eliminates complex external auth service configurations, provides deterministic multi-role RBAC (`ADMIN` vs `MEMBER`) enforced at both the API layer and UI guards. |

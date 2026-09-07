@@ -1,0 +1,78 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  role         String     @default("MEMBER") // "ADMIN" or "MEMBER"
+  department   String?    @default("Admissions")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  assignedLeads Lead[]     @relation("AssignedToUser")
+  activities    Activity[] @relation("CreatedByUser")
+
+  @@map("users")
+}
+
+model Lead {
+  id               String       @id @default(cuid())
+  name             String
+  email            String?
+  phone            String?
+  college          String?      // previous college / high school
+  course           String       // applied / interested course
+  gradYear         Int?         // prospective graduation / target year
+  city             String?
+  source           String       @default("Website") // Website, WhatsApp, Referral, Walk_in, Social_Media, etc.
+  status           String       @default("New")     // New, Contacted, Interested, Follow_up, Converted, Lost
+  nextFollowUpDate DateTime?
+  notes            String?
+
+  assignedToId     String?
+  assignedTo       User?        @relation("AssignedToUser", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  activities       Activity[]
+
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([status])
+  @@index([source])
+  @@index([assignedToId])
+  @@index([nextFollowUpDate])
+  @@index([email])
+  @@index([phone])
+  @@map("leads")
+}
+
+model Activity {
+  id          String    @id @default(cuid())
+  leadId      String
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type        String    // Call, Email, WhatsApp, Meeting, Follow_up
+  date        DateTime  @default(now())
+  notes       String
+  nextAction  String?
+
+  createdById String
+  createdBy   User      @relation("CreatedByUser", fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime  @default(now())
+
+  @@index([leadId])
+  @@index([createdById])
+  @@index([date])
+  @@map("activities")
+}

@@ -3,7 +3,7 @@
  * Tests all 10 Functional Requirements, RBAC, Validation & Reporting.
  */
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 
 interface TestResult {
   name: string;

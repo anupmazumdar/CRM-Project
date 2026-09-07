@@ -9,6 +9,8 @@ interface RouteContext {
   };
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const session = await getSessionUserFromRequest(request);

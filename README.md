@@ -181,6 +181,47 @@ npx tsx scripts/test-e2e.ts
 
 ---
 
+---
+
+## 🌐 Production Deployment (Vercel & PostgreSQL)
+
+The CRM is architected to run seamlessly on **Vercel** with a managed cloud PostgreSQL database (such as [Neon](https://neon.tech), [Supabase](https://supabase.com), or AWS RDS).
+
+### 1. Configure for PostgreSQL
+Run the automated provider switch script:
+```bash
+npm run db:use:postgres
+```
+*(To switch back to local SQLite at any time, simply run `npm run db:use:sqlite`)*
+
+### 2. Setup Cloud PostgreSQL Database (e.g. Neon)
+1. Sign up for free at [Neon](https://neon.tech) and create a project (e.g. `college-crm`).
+2. Copy your pooled connection string (with `?sslmode=require`).
+
+### 3. Push Database Schema & Seed Data
+In your terminal, set your remote `DATABASE_URL` and run:
+```bash
+# Push schema tables to your cloud PostgreSQL database
+npx prisma db push
+
+# (Optional) Seed realistic college demo data
+npm run db:seed
+```
+
+### 4. Deploy to Vercel
+1. Push your repository to GitHub:
+   ```bash
+   git push origin main
+   ```
+2. In [Vercel Dashboard](https://vercel.com), click **Add New Project** and import `CRM-Project`.
+3. Under **Environment Variables**, add:
+   - `DATABASE_URL`: `postgres://username:password@ep-xyz.us-east-2.aws.neon.tech/neondb?sslmode=require`
+   - `JWT_SECRET`: A secure random string (e.g. `openssl rand -base64 32`)
+   - `NEXT_PUBLIC_SHOW_DEMO_LOGINS`: `true` (set to `false` for strict production mode)
+4. Click **Deploy**! Vercel automatically runs `postinstall: prisma generate` and `next build`.
+
+---
+
 ## 📈 Known Limitations & Future Roadmap
 - **SMS Gateway Integration:** Add Twilio/Gupshup SMS webhook trigger for instant automated SMS on lead creation.
 - **WhatsApp Cloud API Integration:** Send automated WhatsApp greeting brochures via Meta Graph API.

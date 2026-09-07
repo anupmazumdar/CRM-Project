@@ -5,6 +5,8 @@ import { hashPassword } from '@/lib/password';
 import { userCreateSchema } from '@/lib/validation';
 import { getFollowUpStatus } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getSessionUserFromRequest(request);

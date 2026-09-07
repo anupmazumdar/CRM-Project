@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "tsc --noEmit",
     "postinstall": "prisma generate",
+    "db:use:postgres": "node scripts/switch-db.js postgresql && prisma generate",
+    "db:use:sqlite": "node scripts/switch-db.js sqlite && prisma generate",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",

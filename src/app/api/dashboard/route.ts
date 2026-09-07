@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { getSessionUserFromRequest } from '@/lib/auth';
 import { getFollowUpStatus } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getSessionUserFromRequest(request);

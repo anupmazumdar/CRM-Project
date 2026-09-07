@@ -126,37 +126,39 @@ function LoginFormContent() {
           </button>
         </form>
 
-        {/* Quick Demo Logins */}
-        <div className="mt-8 pt-6 border-t border-slate-800 space-y-3">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 text-center">
-            Quick One-Click Demo Access
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => fillQuickDemo('admin@college.edu', 'admin123')}
-              className="p-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl text-left transition group"
-            >
-              <div className="flex items-center gap-1.5 text-purple-400 text-xs font-bold">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Admin</span>
-              </div>
-              <div className="text-[10px] text-slate-400 mt-0.5 truncate">admin@college.edu</div>
-            </button>
+        {/* Quick Demo Logins (Collapsible & Configurable) */}
+        {process.env.NEXT_PUBLIC_SHOW_DEMO_LOGINS !== 'false' && (
+          <div className="mt-8 pt-6 border-t border-slate-800 space-y-3">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 text-center">
+              Quick One-Click Demo Access
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => fillQuickDemo('admin@college.edu', 'admin123')}
+                className="p-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl text-left transition group"
+              >
+                <div className="flex items-center gap-1.5 text-purple-400 text-xs font-bold">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Admin</span>
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5 truncate">admin@college.edu</div>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => fillQuickDemo('priya@college.edu', 'counsellor123')}
-              className="p-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl text-left transition group"
-            >
-              <div className="flex items-center gap-1.5 text-blue-400 text-xs font-bold">
-                <UserCheck className="w-3.5 h-3.5" />
-                <span>Counsellor</span>
-              </div>
-              <div className="text-[10px] text-slate-400 mt-0.5 truncate">priya@college.edu</div>
-            </button>
+              <button
+                type="button"
+                onClick={() => fillQuickDemo('priya@college.edu', 'counsellor123')}
+                className="p-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl text-left transition group"
+              >
+                <div className="flex items-center gap-1.5 text-blue-400 text-xs font-bold">
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span>Counsellor</span>
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5 truncate">priya@college.edu</div>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Footer info */}

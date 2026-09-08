@@ -4,6 +4,8 @@ import { createSessionToken, AUTH_COOKIE_NAME } from '@/lib/auth';
 import { comparePassword } from '@/lib/password';
 import { loginSchema } from '@/lib/validation';
 
+export const dynamic = 'force-dynamic';
+
 const MAX_FAILED_ATTEMPTS = 5;
 const FAILURE_WINDOW_MS = 15 * 60 * 1000;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000;

@@ -3,15 +3,18 @@ import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import { UserSession } from './types';
 
-const jwtSecret = process.env.JWT_SECRET;
-
-if (!jwtSecret || jwtSecret.trim().length === 0) {
-  throw new Error('FATAL: JWT_SECRET environment variable is missing or empty. A secure secret is required.');
-}
-
-const SECRET_KEY = new TextEncoder().encode(jwtSecret);
-
 export const AUTH_COOKIE_NAME = 'xyz_crm_token';
+
+function getSecretKey(): Uint8Array {
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret || jwtSecret.trim().length === 0) {
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return new TextEncoder().encode('build-phase-placeholder-secret-not-used-at-runtime');
+    }
+    throw new Error('FATAL: JWT_SECRET environment variable is missing or empty. A secure secret is required.');
+  }
+  return new TextEncoder().encode(jwtSecret);
+}
 
 export async function createSessionToken(user: UserSession): Promise<string> {
   return new SignJWT({
@@ -24,12 +27,12 @@ export async function createSessionToken(user: UserSession): Promise<string> {
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('7d')
-    .sign(SECRET_KEY);
+    .sign(getSecretKey());
 }
 
 export async function verifySessionToken(token: string): Promise<UserSession | null> {
   try {
-    const { payload } = await jwtVerify(token, SECRET_KEY);
+    const { payload } = await jwtVerify(token, getSecretKey());
     return {
       id: payload.id as string,
       name: payload.name as string,

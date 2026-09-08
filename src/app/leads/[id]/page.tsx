@@ -27,6 +27,7 @@ import {
   Clock,
   ExternalLink,
   GraduationCap,
+  X,
 } from 'lucide-react';
 
 export default function StudentProfilePage() {
@@ -38,6 +39,7 @@ export default function StudentProfilePage() {
   const [currentUser, setCurrentUser] = useState<UserSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
 
   // Modals
   const [activityModalOpen, setActivityModalOpen] = useState(false);
@@ -45,6 +47,7 @@ export default function StudentProfilePage() {
 
   // Quick inline state updaters
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [updatingStatusTo, setUpdatingStatusTo] = useState<string | null>(null);
   const [updatingFollowUp, setUpdatingFollowUp] = useState(false);
   const [inlineFollowUpDate, setInlineFollowUpDate] = useState('');
 
@@ -90,6 +93,8 @@ export default function StudentProfilePage() {
   const handleQuickStatusChange = async (newStatus: string) => {
     if (!lead || updatingStatus) return;
     setUpdatingStatus(true);
+    setUpdatingStatusTo(newStatus);
+    setActionError('');
     try {
       const res = await fetch(`/api/leads/${id}/status`, {
         method: 'PATCH',
@@ -100,18 +105,20 @@ export default function StudentProfilePage() {
       if (res.ok) {
         await fetchLeadDetail();
       } else {
-        alert(data.error || 'Failed to update status');
+        setActionError(data.error || 'Failed to update status');
       }
     } catch {
-      alert('Network error');
+      setActionError('Network error while updating status');
     } finally {
       setUpdatingStatus(false);
+      setUpdatingStatusTo(null);
     }
   };
 
   const handleQuickFollowUpSave = async () => {
     if (!lead || updatingFollowUp) return;
     setUpdatingFollowUp(true);
+    setActionError('');
     try {
       const res = await fetch(`/api/leads/${id}/follow-up`, {
         method: 'PATCH',
@@ -124,10 +131,10 @@ export default function StudentProfilePage() {
       if (res.ok) {
         await fetchLeadDetail();
       } else {
-        alert(data.error || 'Failed to update follow up');
+        setActionError(data.error || 'Failed to update follow up');
       }
     } catch {
-      alert('Network error');
+      setActionError('Network error while updating follow-up schedule');
     } finally {
       setUpdatingFollowUp(false);
     }
@@ -199,6 +206,19 @@ export default function StudentProfilePage() {
         </div>
       </div>
 
+      {/* Action Error Alert */}
+      {actionError && (
+        <div className="p-4 bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900/60 rounded-2xl flex items-center justify-between gap-3 text-xs text-red-700 dark:text-red-300 animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+            <span>{actionError}</span>
+          </div>
+          <button onClick={() => setActionError('')} className="text-red-500 hover:text-red-700 p-1">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Main Student Header Card */}
       <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -208,7 +228,7 @@ export default function StudentProfilePage() {
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight break-words max-w-md">
                   {lead.name}
                 </h1>
                 <StatusBadge status={lead.status} size="md" />
@@ -218,21 +238,21 @@ export default function StudentProfilePage() {
               <div className="mt-2 flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-600 dark:text-slate-400">
                 <span className="font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1">
                   <GraduationCap className="w-4 h-4" />
-                  {lead.course}
+                  <span title={lead.course} className="truncate max-w-[220px]">{lead.course}</span>
                 </span>
                 {lead.gradYear && (
                   <span>Target Class of {lead.gradYear}</span>
                 )}
                 {lead.city && (
                   <span className="flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                    {lead.city}
+                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span title={lead.city} className="truncate max-w-[150px]">{lead.city}</span>
                   </span>
                 )}
                 {lead.college && (
                   <span className="flex items-center gap-1">
-                    <School className="w-3.5 h-3.5 text-slate-400" />
-                    {lead.college}
+                    <School className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span title={lead.college} className="truncate max-w-[200px]">{lead.college}</span>
                   </span>
                 )}
               </div>
@@ -277,16 +297,20 @@ export default function StudentProfilePage() {
                   key={stage}
                   onClick={() => handleQuickStatusChange(stage)}
                   disabled={updatingStatus}
-                  className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between transition ${
+                  className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between transition min-h-[44px] ${
                     isCurrent
                       ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20'
                       : isPast
                       ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900'
                       : 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 hover:bg-slate-100'
-                  }`}
+                  } disabled:opacity-60 disabled:cursor-not-allowed`}
                 >
                   <span className="truncate">{stage.replace(/_/g, ' ')}</span>
-                  {isPast && <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+                  {updatingStatusTo === stage ? (
+                    <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />
+                  ) : isPast ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  ) : null}
                 </button>
               );
             })}
@@ -366,10 +390,13 @@ export default function StudentProfilePage() {
 
             <div className="space-y-2 pt-1">
               <input
+                id="student-followup-input"
+                aria-label="Student next follow-up date and time"
                 type="datetime-local"
+                disabled={updatingFollowUp}
                 value={inlineFollowUpDate}
                 onChange={(e) => setInlineFollowUpDate(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
               />
               <button
                 type="button"
@@ -392,7 +419,7 @@ export default function StudentProfilePage() {
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
               Profile Notes & Remarks
             </h3>
-            <p className="text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+            <p className="text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800 break-words">
               {lead.notes || 'No notes added for this student.'}
             </p>
             <div className="pt-2 text-[11px] text-slate-400 space-y-1">

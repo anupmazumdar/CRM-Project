@@ -1,9 +1,13 @@
 /**
  * Automated End-to-End API and Flow Verification Test Suite
- * Tests all 10 Functional Requirements, RBAC, Validation & Reporting.
+ * Tests all Functional Requirements, RBAC, Data Privacy, and Reporting.
+ * Uses a disposable test database to ensure isolation from production/dev data.
  */
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+import { spawn, execSync, ChildProcess } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import net from 'net';
 
 interface TestResult {
   name: string;
@@ -25,8 +29,53 @@ async function assert(name: string, fn: () => Promise<void>) {
   }
 }
 
-async function runTests() {
-  console.log('🚀 Starting Automated CRM Verification Test Suite...\n');
+function getAvailablePort(preferredPort = 3005): Promise<number> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.listen(preferredPort, () => {
+      const port = (server.address() as net.AddressInfo).port;
+      server.close(() => resolve(port));
+    });
+    server.on('error', () => {
+      const freeServer = net.createServer();
+      freeServer.listen(0, () => {
+        const port = (freeServer.address() as net.AddressInfo).port;
+        freeServer.close(() => resolve(port));
+      });
+    });
+  });
+}
+
+function killProcessTree(pid: number) {
+  try {
+    if (process.platform === 'win32') {
+      execSync(`taskkill /pid ${pid} /T /F`, { stdio: 'ignore' });
+    } else {
+      process.kill(-pid, 'SIGKILL');
+    }
+  } catch {
+    // Process may have already stopped
+  }
+}
+
+async function waitForServer(url: string, timeoutMs = 60000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = await fetch(`${url}/api/auth/me`);
+      if (res.status === 401 || res.status === 200) {
+        return true;
+      }
+    } catch {
+      // Server starting up...
+    }
+    await new Promise((r) => setTimeout(r, 600));
+  }
+  return false;
+}
+
+async function runTests(baseUrl: string) {
+  console.log(`🚀 Executing E2E Test Suite against: ${baseUrl}\n`);
 
   let adminCookie = '';
   let memberCookie = '';
@@ -35,7 +84,7 @@ async function runTests() {
 
   // 1. Auth Test: Admin Login
   await assert('1. Admin Login (admin@college.edu)', async () => {
-    const res = await fetch(`${BASE_URL}/api/auth/login`, {
+    const res = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: 'admin@college.edu', password: 'admin123' }),
@@ -50,7 +99,7 @@ async function runTests() {
 
   // 2. Auth Test: Member Login
   await assert('2. Member Login (priya@college.edu)', async () => {
-    const res = await fetch(`${BASE_URL}/api/auth/login`, {
+    const res = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: 'priya@college.edu', password: 'counsellor123' }),
@@ -66,7 +115,7 @@ async function runTests() {
 
   // 3. Validation Test: Reject Invalid Email & Empty Submission
   await assert('3. Validation: Reject Invalid Email and Missing Contact Info', async () => {
-    const res = await fetch(`${BASE_URL}/api/leads`, {
+    const res = await fetch(`${baseUrl}/api/leads`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
       body: JSON.stringify({
@@ -84,9 +133,9 @@ async function runTests() {
     }
   });
 
-  // 4. Duplicate Check Test: Detect Existing Email / Phone
-  await assert('4. Duplicate Detection: Flag Existing Email (aarav.patel@gmail.com)', async () => {
-    const res = await fetch(`${BASE_URL}/api/leads/check-duplicate`, {
+  // 4. Duplicate Check Test (Admin): Detect Existing Email with Full Details
+  await assert('4. Duplicate Detection (Admin): Flag Existing Email with Record Summary', async () => {
+    const res = await fetch(`${baseUrl}/api/leads/check-duplicate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
       body: JSON.stringify({ email: 'aarav.patel@gmail.com' }),
@@ -95,16 +144,31 @@ async function runTests() {
     const data = await res.json();
     if (!data.isDuplicate) throw new Error('Expected isDuplicate to be true');
     if (!data.existingLead || data.existingLead.name !== 'Aarav Patel') {
-      throw new Error(`Expected match with Aarav Patel, got: ${JSON.stringify(data.existingLead)}`);
+      throw new Error(`Expected match with Aarav Patel for Admin, got: ${JSON.stringify(data.existingLead)}`);
     }
   });
 
-  // 5. Lead Creation Test: Create New Lead Record
-  await assert('5. Lead Management: Create Valid Lead with Follow-up Date', async () => {
+  // 5. Duplicate Check Test (Member/Privacy): Prevent Leaking Other Students' Details
+  await assert('5. Duplicate Privacy: Prevent Exposing Other Students Details to Counsellor', async () => {
+    // Diya Sen is assigned to Rahul Verma, NOT Priya Sharma
+    const res = await fetch(`${baseUrl}/api/leads/check-duplicate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: memberCookie },
+      body: JSON.stringify({ email: 'diya.sen@outlook.com' }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.isDuplicate || data.existingLead !== undefined) {
+      throw new Error(`Data leakage! Unauthorized lead match was disclosed: ${JSON.stringify(data)}`);
+    }
+  });
+
+  // 6. Lead Creation Test: Create New Lead Record
+  await assert('6. Lead Management: Create Valid Lead with Follow-up Date', async () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 2);
 
-    const res = await fetch(`${BASE_URL}/api/leads`, {
+    const res = await fetch(`${baseUrl}/api/leads`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
       body: JSON.stringify({
@@ -128,17 +192,15 @@ async function runTests() {
     if (data.lead.name !== 'Tanya Mehra') throw new Error('Name mismatch');
   });
 
-  // 6. RBAC Test: Admin sees all leads vs Member sees only assigned
-  await assert('6. RBAC Enforcement: Admin vs Team Member Visibility Scope', async () => {
-    // Admin request
-    const adminRes = await fetch(`${BASE_URL}/api/leads`, {
+  // 7. RBAC Test: Admin sees all leads vs Member sees only assigned
+  await assert('7. RBAC Enforcement: Admin vs Team Member Visibility Scope', async () => {
+    const adminRes = await fetch(`${baseUrl}/api/leads`, {
       headers: { Cookie: adminCookie },
     });
     const adminData = await adminRes.json();
     const adminTotal = adminData.pagination.total;
 
-    // Member request
-    const memberRes = await fetch(`${BASE_URL}/api/leads`, {
+    const memberRes = await fetch(`${baseUrl}/api/leads`, {
       headers: { Cookie: memberCookie },
     });
     const memberData = await memberRes.json();
@@ -148,7 +210,6 @@ async function runTests() {
       throw new Error(`Member total (${memberTotal}) should be smaller than Admin total (${adminTotal})`);
     }
 
-    // Verify all member leads belong to that member
     for (const lead of memberData.leads) {
       if (lead.assignedToId !== memberUserId) {
         throw new Error(`Leaked unassigned lead ${lead.id} to member`);
@@ -156,9 +217,9 @@ async function runTests() {
     }
   });
 
-  // 7. Combinable Filter Test: Search + Status + Source
-  await assert('7. Search & Combinable Filters: Status=Interested + Search="Diya"', async () => {
-    const res = await fetch(`${BASE_URL}/api/leads?status=Interested&search=Diya`, {
+  // 8. Combinable Filter Test: Search + Status + Source
+  await assert('8. Search & Combinable Filters: Status=Interested + Search="Diya"', async () => {
+    const res = await fetch(`${baseUrl}/api/leads?status=Interested&search=Diya`, {
       headers: { Cookie: adminCookie },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -167,9 +228,9 @@ async function runTests() {
     if (!data.leads[0].name.includes('Diya')) throw new Error('Filtered result mismatch');
   });
 
-  // 8. Quick Status Transition Test: New -> Contacted
-  await assert('8. Status Pipeline: Update Lead Status to "Contacted"', async () => {
-    const res = await fetch(`${BASE_URL}/api/leads/${testLeadId}/status`, {
+  // 9. Quick Status Transition Test: New -> Contacted
+  await assert('9. Status Pipeline: Update Lead Status to "Contacted"', async () => {
+    const res = await fetch(`${baseUrl}/api/leads/${testLeadId}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
       body: JSON.stringify({ status: 'Contacted' }),
@@ -179,9 +240,9 @@ async function runTests() {
     if (data.lead.status !== 'Contacted') throw new Error(`Expected Contacted, got ${data.lead.status}`);
   });
 
-  // 9. Activity Logging Test: Add Call with Next Action
-  await assert('9. Activity Logging & Timeline: Log Phone Call Interaction', async () => {
-    const res = await fetch(`${BASE_URL}/api/activities`, {
+  // 10. Activity Logging Test: Add Call with Next Action
+  await assert('10. Activity Logging & Timeline: Log Phone Call Interaction', async () => {
+    const res = await fetch(`${baseUrl}/api/activities`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
       body: JSON.stringify({
@@ -198,9 +259,9 @@ async function runTests() {
     if (data.activity.type !== 'Call') throw new Error('Activity type mismatch');
   });
 
-  // 10. Student Profile Detail: Fetch and verify chronological timeline
-  await assert('10. Student Profile Page: Verify Chronological Activity Timeline', async () => {
-    const res = await fetch(`${BASE_URL}/api/leads/${testLeadId}`, {
+  // 11. Student Profile Detail: Fetch and verify chronological timeline
+  await assert('11. Student Profile Page: Verify Chronological Activity Timeline', async () => {
+    const res = await fetch(`${baseUrl}/api/leads/${testLeadId}`, {
       headers: { Cookie: adminCookie },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -212,9 +273,9 @@ async function runTests() {
     }
   });
 
-  // 11. Dashboard Analytics Test: Real query metrics
-  await assert('11. Executive Dashboard: Compute Live Real-Time Analytics & KPIs', async () => {
-    const res = await fetch(`${BASE_URL}/api/dashboard`, {
+  // 12. Dashboard Analytics Test: Real query metrics
+  await assert('12. Executive Dashboard: Compute Live Real-Time Analytics & KPIs', async () => {
+    const res = await fetch(`${baseUrl}/api/dashboard`, {
       headers: { Cookie: adminCookie },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -233,9 +294,9 @@ async function runTests() {
     }
   });
 
-  // 12. Team Management Test: Team Scorecard & Member Counts
-  await assert('12. Team Management: Group Live Conversion Metrics by Counsellor', async () => {
-    const res = await fetch(`${BASE_URL}/api/team`, {
+  // 13. Team Management Test: Team Scorecard & Member Counts (Admin)
+  await assert('13. Team Management (Admin): Group Live Conversion Metrics by Counsellor', async () => {
+    const res = await fetch(`${baseUrl}/api/team`, {
       headers: { Cookie: adminCookie },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -249,9 +310,19 @@ async function runTests() {
     }
   });
 
-  // 13. Reports Section Test: SLA Health & Channel breakdown
-  await assert('13. Reports Section: Compute Conversion Rate, SLA Compliance & Channels', async () => {
-    const res = await fetch(`${BASE_URL}/api/reports`, {
+  // 14. RBAC Check: Member Blocked from Reading /api/team
+  await assert('14. RBAC: Team Member Blocked from Reading /api/team (403 Forbidden)', async () => {
+    const res = await fetch(`${baseUrl}/api/team`, {
+      headers: { Cookie: memberCookie },
+    });
+    if (res.status !== 403) {
+      throw new Error(`Expected HTTP 403 Forbidden for member read, got HTTP ${res.status}`);
+    }
+  });
+
+  // 15. Reports Section Test: SLA Health & Channel breakdown
+  await assert('15. Reports Section: Compute Conversion Rate, SLA Compliance & Channels', async () => {
+    const res = await fetch(`${baseUrl}/api/reports`, {
       headers: { Cookie: adminCookie },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -263,11 +334,135 @@ async function runTests() {
       throw new Error('SLA onTimeRate missing in report');
     }
   });
-
-  console.log('\n=========================================');
-  const passedCount = results.filter((r) => r.passed).length;
-  console.log(`🎉 TEST SUMMARY: ${passedCount}/${results.length} PASSED (100%)`);
-  console.log('=========================================\n');
 }
 
-runTests();
+async function main() {
+  console.log('🚀 Starting Automated CRM Verification & Test Runner...\n');
+
+  // If external BASE_URL is provided, test directly against it
+  if (process.env.BASE_URL) {
+    try {
+      await runTests(process.env.BASE_URL);
+    } catch (err: any) {
+      console.error('Fatal execution error:', err.message);
+    }
+
+    printSummaryAndExit();
+    return;
+  }
+
+  // Setup Disposable Test Database & Server
+  console.log('📦 Provisioning disposable test database for test run...');
+  const schemaPath = path.join(process.cwd(), 'prisma', 'schema.prisma');
+  const schemaContent = fs.readFileSync(schemaPath, 'utf8');
+  const isSqlite = /provider\s*=\s*"sqlite"/i.test(schemaContent);
+
+  let disposableDbUrl = '';
+  let tempDbPath = '';
+  let testSchemaName = '';
+  let serverProcess: ChildProcess | null = null;
+
+  try {
+    if (isSqlite) {
+      const tempDbName = `test-e2e-${Date.now()}.db`;
+      tempDbPath = path.join(process.cwd(), 'prisma', tempDbName);
+      disposableDbUrl = `file:./${tempDbName}`;
+    } else {
+      const basePgUrl =
+        process.env.DATABASE_URL ||
+        'postgresql://neondb_owner:npg_udVFQk30bRol@ep-bitter-sky-aycblorq-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require';
+      testSchemaName = `test_e2e_${Date.now()}`;
+      const url = new URL(basePgUrl);
+      url.searchParams.set('schema', testSchemaName);
+      disposableDbUrl = url.toString();
+    }
+
+    console.log(`🔧 Applying schema to disposable database (${isSqlite ? 'SQLite' : 'PostgreSQL Schema'})...`);
+    execSync(`npx prisma db push --skip-generate --accept-data-loss`, {
+      env: { ...process.env, DATABASE_URL: disposableDbUrl },
+      stdio: 'pipe',
+    });
+
+    console.log('🌱 Seeding initial test data into disposable database...');
+    execSync(`npx tsx prisma/seed.ts`, {
+      env: { ...process.env, DATABASE_URL: disposableDbUrl },
+      stdio: 'pipe',
+    });
+
+    const testPort = await getAvailablePort(3005);
+    const testUrl = `http://localhost:${testPort}`;
+    console.log(`🌐 Launching ephemeral test server on port ${testPort}...`);
+
+    serverProcess = spawn(
+      process.platform === 'win32' ? 'npx.cmd' : 'npx',
+      ['next', 'dev', '-p', String(testPort)],
+      {
+        shell: true,
+        env: {
+          ...process.env,
+          DATABASE_URL: disposableDbUrl,
+          PORT: String(testPort),
+          NODE_ENV: 'development',
+        },
+        stdio: 'pipe',
+      }
+    );
+
+    const isReady = await waitForServer(testUrl, 45000);
+    if (!isReady) {
+      throw new Error(`Test server failed to start on port ${testPort} within timeout`);
+    }
+    console.log(`✨ Ephemeral test server ready at ${testUrl}\n`);
+
+    await runTests(testUrl);
+  } catch (err: any) {
+    console.error(`\n❌ Error during test environment lifecycle: ${err.message}`);
+    results.push({ name: 'Test Environment Lifecycle', passed: false, error: err.message });
+  } finally {
+    // Teardown test server
+    if (serverProcess && serverProcess.pid) {
+      console.log('\n🧹 Shutting down ephemeral test server...');
+      killProcessTree(serverProcess.pid);
+    }
+
+    // Teardown disposable database
+    console.log('🧹 Cleaning up disposable test database...');
+    if (isSqlite && tempDbPath) {
+      try {
+        if (fs.existsSync(tempDbPath)) fs.unlinkSync(tempDbPath);
+        if (fs.existsSync(`${tempDbPath}-journal`)) fs.unlinkSync(`${tempDbPath}-journal`);
+        if (fs.existsSync(`${tempDbPath}-wal`)) fs.unlinkSync(`${tempDbPath}-wal`);
+      } catch (cleanupErr) {
+        console.warn('Notice: Could not remove temporary SQLite test file:', cleanupErr);
+      }
+    } else if (!isSqlite && testSchemaName) {
+      try {
+        const cleanupCmd = `import { PrismaClient } from '@prisma/client'; const p = new PrismaClient({ datasourceUrl: '${disposableDbUrl}' }); p.$executeRawUnsafe('DROP SCHEMA IF EXISTS "${testSchemaName}" CASCADE').finally(() => p.$disconnect());`;
+        execSync(`npx tsx -e "${cleanupCmd}"`, { stdio: 'pipe' });
+      } catch {
+        // Schema cleanup notice
+      }
+    }
+  }
+
+  printSummaryAndExit();
+}
+
+function printSummaryAndExit() {
+  console.log('\n=========================================');
+  const passedCount = results.filter((r) => r.passed).length;
+  const totalCount = results.length;
+  const percentage = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0;
+
+  if (passedCount === totalCount && totalCount > 0) {
+    console.log(`🎉 TEST SUMMARY: ${passedCount}/${totalCount} PASSED (${percentage}%)`);
+    console.log('=========================================\n');
+    process.exit(0);
+  } else {
+    console.error(`❌ TEST SUMMARY: ${passedCount}/${totalCount} PASSED (${percentage}%) - TESTS FAILED`);
+    console.log('=========================================\n');
+    process.exit(1);
+  }
+}
+
+main();

@@ -14,26 +14,47 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        department: true,
-        createdAt: true,
-        assignedLeads: {
-          select: {
-            id: true,
-            status: true,
-            nextFollowUpDate: true,
+    if (session.role !== 'ADMIN') {
+      return NextResponse.json(
+        { error: 'Forbidden. Only Admins can view team performance details.' },
+        { status: 403 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    // Sane cap: limit up to 200 per page to safeguard database memory
+    const requestedLimit = parseInt(searchParams.get('limit') || '100', 10);
+    const limit = Math.min(Math.max(1, requestedLimit), 200);
+    const skip = (page - 1) * limit;
+
+    // NOTE (Scalability): For large institutions with hundreds of counsellors, full cursor-based
+    // or offset pagination should be used here. Default limit is capped at 100 users (max 200 per query).
+    const [totalUsers, users] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.findMany({
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          department: true,
+          createdAt: true,
+          assignedLeads: {
+            select: {
+              id: true,
+              status: true,
+              nextFollowUpDate: true,
+            },
           },
         },
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-    });
+        orderBy: {
+          createdAt: 'asc',
+        },
+      }),
+    ]);
 
     const teamStats = users.map((u: any) => {
       const leads = u.assignedLeads || [];
@@ -66,7 +87,16 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ team: teamStats });
+    return NextResponse.json({
+      team: teamStats,
+      pagination: {
+        total: totalUsers,
+        page,
+        limit,
+        totalPages: Math.ceil(totalUsers / limit),
+        isCapped: totalUsers > limit,
+      },
+    });
   } catch (error) {
     console.error('Fetch team error:', error);
     return NextResponse.json({ error: 'Failed to fetch team details' }, { status: 500 });

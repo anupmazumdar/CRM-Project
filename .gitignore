@@ -38,3 +38,4 @@ prisma/*.db
 prisma/*.db-journal
 dev.db
 .neon
+*.log

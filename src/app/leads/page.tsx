@@ -24,6 +24,9 @@ import {
   ChevronRight,
   User,
   GraduationCap,
+  AlertCircle,
+  RotateCcw,
+  X,
 } from 'lucide-react';
 
 function LeadsContent() {
@@ -44,6 +47,10 @@ function LeadsContent() {
   const [leads, setLeads] = useState<LeadItem[]>([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 20, totalPages: 1 });
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [currentUser, setCurrentUser] = useState<UserSession | null>(null);
 
   // Modal states
@@ -65,6 +72,7 @@ function LeadsContent() {
   // Fetch leads with debouncing on search
   const fetchLeads = useCallback(async () => {
     setIsLoading(true);
+    setError('');
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
@@ -79,14 +87,17 @@ function LeadsContent() {
       params.set('limit', '25');
 
       const res = await fetch(`/api/leads?${params.toString()}`);
+      if (!res.ok) {
+        throw new Error('Failed to load leads from server.');
+      }
       const data = await res.json();
 
       if (data.leads) {
         setLeads(data.leads);
         setPagination(data.pagination);
       }
-    } catch (err) {
-      console.error('Fetch leads error:', err);
+    } catch (err: any) {
+      setError(err.message || 'Error loading student leads.');
     } finally {
       setIsLoading(false);
     }
@@ -111,67 +122,101 @@ function LeadsContent() {
     setPage(1);
   };
 
-  const handleExportCSV = () => {
-    if (leads.length === 0) return;
+  const handleExportCSV = async () => {
+    setIsExporting(true);
+    setExportError('');
+    try {
+      const exportParams = new URLSearchParams();
+      if (search) exportParams.set('search', search);
+      if (status !== 'all') exportParams.set('status', status);
+      if (source !== 'all') exportParams.set('source', source);
+      if (assignedTo !== 'all') exportParams.set('assignedTo', assignedTo);
+      if (course !== 'all') exportParams.set('course', course);
+      if (followUpState !== 'all') exportParams.set('followUpState', followUpState);
+      if (startDate) exportParams.set('startDate', startDate);
+      if (endDate) exportParams.set('endDate', endDate);
+      exportParams.set('page', '1');
+      exportParams.set('limit', '5000');
 
-    const headers = [
-      'ID',
-      'Name',
-      'Email',
-      'Phone',
-      'Course',
-      'Grad Year',
-      'College',
-      'City',
-      'Source',
-      'Status',
-      'Assigned To',
-      'Next Follow-up',
-      'Date Added',
-    ];
+      const res = await fetch(`/api/leads?${exportParams.toString()}`);
+      if (!res.ok) {
+        throw new Error('Failed to retrieve full student records for export.');
+      }
+      const data = await res.json();
+      const exportRecords: LeadItem[] = data.leads || leads;
 
-    const rows = leads.map((l) => [
-      l.id,
-      `"${(l.name || '').replace(/"/g, '""')}"`,
-      `"${l.email || ''}"`,
-      `"${l.phone || ''}"`,
-      `"${l.course || ''}"`,
-      l.gradYear || '',
-      `"${(l.college || '').replace(/"/g, '""')}"`,
-      `"${l.city || ''}"`,
-      l.source || '',
-      l.status || '',
-      `"${l.assignedTo?.name || 'Unassigned'}"`,
-      l.nextFollowUpDate ? formatDate(l.nextFollowUpDate, true) : '',
-      formatDate(l.createdAt),
-    ]);
+      if (exportRecords.length === 0) {
+        setExportError('No matching student inquiries to export.');
+        return;
+      }
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `xyz_college_leads_export_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const headers = [
+        'ID',
+        'Name',
+        'Email',
+        'Phone',
+        'Course',
+        'Grad Year',
+        'College',
+        'City',
+        'Source',
+        'Status',
+        'Assigned To',
+        'Next Follow-up',
+        'Date Added',
+      ];
+
+      const rows = exportRecords.map((l) => [
+        l.id,
+        `"${(l.name || '').replace(/"/g, '""')}"`,
+        `"${l.email || ''}"`,
+        `"${l.phone || ''}"`,
+        `"${l.course || ''}"`,
+        l.gradYear || '',
+        `"${(l.college || '').replace(/"/g, '""')}"`,
+        `"${l.city || ''}"`,
+        l.source || '',
+        l.status || '',
+        `"${l.assignedTo?.name || 'Unassigned'}"`,
+        l.nextFollowUpDate ? formatDate(l.nextFollowUpDate, true) : '',
+        formatDate(l.createdAt),
+      ]);
+
+      const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `xyz_college_leads_export_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err: any) {
+      setExportError(err.message || 'Error occurred during CSV file generation.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleDeleteLead = async () => {
     if (!deletingLead) return;
     setIsDeleting(true);
+    setDeleteError('');
     try {
       const res = await fetch(`/api/leads/${deletingLead.id}`, {
         method: 'DELETE',
       });
+      const data = await res.json();
       if (res.ok) {
         setLeads((prev) => prev.filter((l) => l.id !== deletingLead.id));
         setPagination((prev) => ({ ...prev, total: prev.total - 1 }));
+        setDeletingLead(null);
+      } else {
+        setDeleteError(data.error || 'Failed to delete student lead.');
       }
-    } catch (err) {
-      console.error('Delete error:', err);
+    } catch {
+      setDeleteError('Network error occurred while attempting to delete lead.');
     } finally {
       setIsDeleting(false);
-      setDeletingLead(null);
     }
   };
 
@@ -248,14 +293,47 @@ function LeadsContent() {
         }}
         onReset={handleResetFilters}
         onExportCSV={handleExportCSV}
+        isExporting={isExporting}
+        exportError={exportError}
         currentUser={currentUser}
         totalResults={pagination.total}
       />
 
+      {/* Delete Error Alert */}
+      {deleteError && (
+        <div className="p-4 bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900/60 rounded-2xl flex items-center justify-between gap-3 text-xs text-red-700 dark:text-red-300 animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+            <span>{deleteError}</span>
+          </div>
+          <button onClick={() => setDeleteError('')} className="text-red-500 hover:text-red-700 p-1">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Fetch Error Banner */}
+      {error && (
+        <div className="p-6 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-2xl text-center space-y-3">
+          <AlertCircle className="w-8 h-8 text-red-500 mx-auto" />
+          <h3 className="text-sm font-bold text-red-700 dark:text-red-300">
+            Failed to Load Student Records
+          </h3>
+          <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+          <button
+            onClick={fetchLeads}
+            className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition shadow-sm inline-flex items-center gap-1.5"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Try Again</span>
+          </button>
+        </div>
+      )}
+
       {/* Table Container */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs sm:text-sm">
+          <table className="w-full min-w-[850px] text-left text-xs sm:text-sm">
             <thead>
               <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 <th className="py-3.5 px-4">Student Demographics</th>
@@ -281,10 +359,36 @@ function LeadsContent() {
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-slate-400">
                     <GraduationCap className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
-                    <p className="font-semibold text-slate-700 dark:text-slate-300">No student records found</p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Try relaxing your search terms or filter criteria.
+                    <p className="font-semibold text-slate-700 dark:text-slate-300">
+                      {search || status !== 'all' || source !== 'all' || assignedTo !== 'all' || course !== 'all' || followUpState !== 'all' || startDate || endDate
+                        ? 'No student records match your filter criteria'
+                        : 'No student inquiries registered yet'}
                     </p>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                      {search || status !== 'all' || source !== 'all' || assignedTo !== 'all' || course !== 'all' || followUpState !== 'all' || startDate || endDate
+                        ? 'Try clearing active filters or modifying your search query to see other admissions leads.'
+                        : 'Get started by creating your first student record or importing from admissions campaigns.'}
+                    </p>
+                    <div className="mt-4 flex items-center justify-center gap-2">
+                      {search || status !== 'all' || source !== 'all' || assignedTo !== 'all' || course !== 'all' || followUpState !== 'all' || startDate || endDate ? (
+                        <button
+                          onClick={handleResetFilters}
+                          className="px-3.5 py-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 rounded-xl transition"
+                        >
+                          Clear All Filters
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditingLead(null);
+                            setFormModalOpen(true);
+                          }}
+                          className="px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition shadow-sm"
+                        >
+                          + Register First Student
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -302,16 +406,17 @@ function LeadsContent() {
                         <div className="min-w-0">
                           <Link
                             href={`/leads/${lead.id}`}
-                            className="font-bold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 block truncate"
+                            title={lead.name}
+                            className="font-bold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 block truncate max-w-[180px]"
                           >
                             {lead.name}
                           </Link>
                           <div className="text-[11px] text-slate-400 truncate flex items-center gap-1.5 mt-0.5">
-                            {lead.city && <span>{lead.city}</span>}
+                            {lead.city && <span title={lead.city}>{lead.city}</span>}
                             {lead.college && (
                               <>
                                 <span>•</span>
-                                <span className="truncate max-w-[140px]">{lead.college}</span>
+                                <span title={lead.college} className="truncate max-w-[140px]">{lead.college}</span>
                               </>
                             )}
                           </div>
@@ -321,7 +426,7 @@ function LeadsContent() {
 
                     {/* Course */}
                     <td className="py-3.5 px-3">
-                      <span className="font-semibold text-slate-800 dark:text-slate-200 block truncate max-w-[160px]">
+                      <span title={lead.course} className="font-semibold text-slate-800 dark:text-slate-200 block truncate max-w-[160px]">
                         {lead.course}
                       </span>
                       <span className="text-[11px] text-slate-400">
@@ -362,18 +467,18 @@ function LeadsContent() {
                             <a
                               href={`tel:${lead.phone}`}
                               title={`Call ${lead.phone}`}
-                              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/60 rounded-lg transition"
+                              className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/60 rounded-xl transition min-h-[36px] min-w-[36px] flex items-center justify-center"
                             >
-                              <Phone className="w-3.5 h-3.5" />
+                              <Phone className="w-4 h-4" />
                             </a>
                             <a
                               href={`https://wa.me/${lead.phone.replace(/\D/g, '')}`}
                               target="_blank"
                               rel="noreferrer"
                               title="WhatsApp Chat"
-                              className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 rounded-lg transition"
+                              className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 rounded-xl transition min-h-[36px] min-w-[36px] flex items-center justify-center"
                             >
-                              <MessageCircle className="w-3.5 h-3.5" />
+                              <MessageCircle className="w-4 h-4" />
                             </a>
                           </>
                         )}
@@ -381,9 +486,9 @@ function LeadsContent() {
                           <a
                             href={`mailto:${lead.email}`}
                             title={`Email ${lead.email}`}
-                            className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950/60 rounded-lg transition"
+                            className="p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950/60 rounded-xl transition min-h-[36px] min-w-[36px] flex items-center justify-center"
                           >
-                            <Mail className="w-3.5 h-3.5" />
+                            <Mail className="w-4 h-4" />
                           </a>
                         )}
                       </div>
@@ -395,9 +500,9 @@ function LeadsContent() {
                         <Link
                           href={`/leads/${lead.id}`}
                           title="View Full Profile & Timeline"
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
+                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition min-h-[36px] min-w-[36px] flex items-center justify-center"
                         >
-                          <ExternalLink className="w-3.5 h-3.5" />
+                          <ExternalLink className="w-4 h-4" />
                         </Link>
                         <button
                           onClick={() => {
@@ -405,17 +510,17 @@ function LeadsContent() {
                             setFormModalOpen(true);
                           }}
                           title="Edit Student Record"
-                          className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/60 rounded-lg transition"
+                          className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/60 rounded-xl transition min-h-[36px] min-w-[36px] flex items-center justify-center"
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
+                          <Edit2 className="w-4 h-4" />
                         </button>
                         {currentUser?.role === 'ADMIN' && (
                           <button
                             onClick={() => setDeletingLead(lead)}
                             title="Delete Lead (Admin Only)"
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/60 rounded-lg transition"
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/60 rounded-xl transition min-h-[36px] min-w-[36px] flex items-center justify-center"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                       </div>
@@ -437,7 +542,7 @@ function LeadsContent() {
               <button
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-40 flex items-center gap-1 font-medium"
+                className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-40 flex items-center gap-1 font-medium min-h-[38px]"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
                 <span>Prev</span>
@@ -445,7 +550,7 @@ function LeadsContent() {
               <button
                 disabled={page >= pagination.totalPages}
                 onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-40 flex items-center gap-1 font-medium"
+                className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-40 flex items-center gap-1 font-medium min-h-[38px]"
               >
                 <span>Next</span>
                 <ChevronRight className="w-3.5 h-3.5" />

@@ -31,9 +31,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const [leads, users, activities] = await Promise.all([
+    const requestedLimit = parseInt(searchParams.get('limit') || '200', 10);
+    const leadCap = Math.min(Math.max(1, requestedLimit), 500);
+
+    // NOTE (Scalability): When lead volume exceeds thousands, in-memory aggregation
+    // will cause high latency and memory spikes. Full pagination, scheduled materialized rollups,
+    // and database-level aggregations (e.g. prisma.lead.groupBy) should be added as admissions grow.
+    // Query is capped at `leadCap` (default 200) with total count tracked separately.
+    const [totalLeadCount, leads, users, activities] = await Promise.all([
+      prisma.lead.count({ where }),
       prisma.lead.findMany({
         where,
+        take: leadCap,
+        orderBy: { createdAt: 'desc' },
         include: {
           assignedTo: {
             select: {
@@ -52,6 +62,8 @@ export async function GET(request: NextRequest) {
       }),
       prisma.activity.findMany({
         where: session.role === 'MEMBER' ? { lead: { assignedToId: session.id } } : {},
+        take: 500,
+        orderBy: { date: 'desc' },
         select: {
           id: true,
           type: true,
@@ -157,7 +169,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       summary: {
-        totalLeads,
+        totalLeads: totalLeadCount,
+        analyzedLeads: totalLeads,
+        isCapped: totalLeadCount > totalLeads,
+        sampleCap: leadCap,
         convertedLeads,
         lostLeads,
         overallConversionRate,

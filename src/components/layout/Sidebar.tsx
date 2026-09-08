@@ -10,6 +10,7 @@ import {
   BarChart3,
   GraduationCap,
   Sparkles,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { UserSession } from '@/lib/types';
 
@@ -27,8 +28,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentUser, isOpen, onCloseMo
     { name: 'Student Leads', href: '/leads', icon: Users },
     { name: 'Admissions Pipeline', href: '/pipeline', icon: Kanban },
     { name: 'Follow-ups Queue', href: '/follow-ups', icon: Clock },
-    { name: 'Team Performance', href: '/team', icon: UserCheck },
+    ...(currentUser?.role === 'ADMIN'
+      ? [{ name: 'Team Performance', href: '/team', icon: UserCheck }]
+      : []),
     { name: 'Reports & Analytics', href: '/reports', icon: BarChart3 },
+    { name: 'Settings', href: '/settings', icon: SettingsIcon },
   ];
 
   return (

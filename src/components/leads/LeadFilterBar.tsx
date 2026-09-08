@@ -22,6 +22,8 @@ interface LeadFilterBarProps {
   onEndDateChange: (val: string) => void;
   onReset: () => void;
   onExportCSV: () => void;
+  isExporting?: boolean;
+  exportError?: string;
   currentUser: UserSession | null;
   totalResults: number;
 }
@@ -45,6 +47,8 @@ export const LeadFilterBar: React.FC<LeadFilterBarProps> = ({
   onEndDateChange,
   onReset,
   onExportCSV,
+  isExporting = false,
+  exportError = '',
   currentUser,
   totalResults,
 }) => {
@@ -52,89 +56,83 @@ export const LeadFilterBar: React.FC<LeadFilterBarProps> = ({
   const [counsellors, setCounsellors] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
-    fetch('/api/team')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.team) {
-          setCounsellors(data.team);
-        }
-      })
-      .catch(() => {});
-  }, []);
+    if (currentUser?.role === 'ADMIN') {
+      fetch('/api/team')
+        .then((res) => {
+          if (!res.ok) return { team: [] };
+          return res.json();
+        })
+        .then((data) => {
+          if (data.team) {
+            setCounsellors(data.team);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [currentUser?.role]);
 
   const activeFilterCount = [
-    status !== 'all' ? 1 : 0,
-    source !== 'all' ? 1 : 0,
-    assignedTo !== 'all' ? 1 : 0,
-    course !== 'all' ? 1 : 0,
-    followUpState !== 'all' ? 1 : 0,
-    startDate ? 1 : 0,
-    endDate ? 1 : 0,
-  ].reduce((a, b) => a + b, 0);
+    status !== 'all',
+    source !== 'all',
+    assignedTo !== 'all',
+    course !== 'all',
+    followUpState !== 'all',
+    Boolean(startDate),
+    Boolean(endDate),
+  ].filter(Boolean).length;
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm space-y-3">
-      {/* Primary search row */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
-        {/* Search box */}
+    <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-3">
+      {exportError && (
+        <div className="p-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-xl text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
+          <span>{exportError}</span>
+        </div>
+      )}
+      {/* Top Search & Primary Filter Row */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        {/* Search input with debouncing */}
         <div className="relative flex-1">
+          <label htmlFor="lead-search-input" className="sr-only">
+            Search students by name, email, phone, college, or city
+          </label>
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
+            id="lead-search-input"
             type="text"
-            placeholder="Search by student name, phone, email, college, city..."
+            placeholder="Search by student name, email, phone, city, college..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition placeholder:text-slate-400"
+            className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition min-h-[44px]"
           />
-          {search && (
-            <button
-              onClick={() => onSearchChange('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-medium px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700"
-            >
-              Clear
-            </button>
-          )}
         </div>
 
-        {/* Quick status filter */}
-        <div className="w-full md:w-44">
+        {/* Quick status dropdown & Filter Toggle */}
+        <div className="flex items-center gap-2">
+          {/* Quick status filter */}
+          <label htmlFor="filter-status-quick" className="sr-only">
+            Filter by pipeline status
+          </label>
           <select
+            id="filter-status-quick"
             value={status}
             onChange={(e) => onStatusChange(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700 dark:text-slate-200"
+            className="px-3 py-2.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-700 dark:text-slate-200 min-h-[44px]"
           >
-            <option value="all">All Pipeline Statuses</option>
+            <option value="all">All Stages</option>
             {LEAD_STATUS_ORDER.map((st) => (
               <option key={st} value={st}>
                 {st.replace(/_/g, ' ')}
               </option>
             ))}
           </select>
-        </div>
 
-        {/* Quick follow-up tag filter */}
-        <div className="w-full md:w-44">
-          <select
-            value={followUpState}
-            onChange={(e) => onFollowUpStateChange(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700 dark:text-slate-200"
-          >
-            <option value="all">All Follow-ups</option>
-            <option value="OVERDUE">🔴 Overdue</option>
-            <option value="DUE_TODAY">🟡 Due Today</option>
-            <option value="UPCOMING">🟢 Upcoming</option>
-            <option value="NONE">⚪ No Follow-up</option>
-          </select>
-        </div>
-
-        {/* Toggle Filters & Actions */}
-        <div className="flex items-center gap-2">
+          {/* Advanced filter toggle button */}
           <button
             type="button"
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className={`px-3.5 py-2.5 text-sm font-medium rounded-xl border transition flex items-center gap-2 shrink-0 ${
+            className={`px-3.5 py-2.5 text-xs sm:text-sm font-medium rounded-xl border transition flex items-center gap-1.5 shrink-0 min-h-[44px] ${
               showAdvanced || activeFilterCount > 0
-                ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
+                ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-900'
                 : 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750'
             }`}
           >
@@ -151,11 +149,16 @@ export const LeadFilterBar: React.FC<LeadFilterBarProps> = ({
           <button
             type="button"
             onClick={onExportCSV}
+            disabled={isExporting}
             title="Export filtered records to CSV"
-            className="px-3.5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750 rounded-xl transition flex items-center gap-1.5 shrink-0 shadow-sm"
+            className="px-3.5 py-2.5 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750 rounded-xl transition flex items-center gap-1.5 shrink-0 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed min-h-[44px]"
           >
-            <Download className="w-4 h-4 text-slate-500" />
-            <span className="hidden sm:inline">Export</span>
+            {isExporting ? (
+              <span className="w-4 h-4 border-2 border-slate-600 dark:border-slate-300 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 text-slate-500" />
+            )}
+            <span className="hidden sm:inline">{isExporting ? 'Exporting...' : 'Export'}</span>
           </button>
         </div>
       </div>
@@ -165,10 +168,11 @@ export const LeadFilterBar: React.FC<LeadFilterBarProps> = ({
         <div className="pt-3 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 animate-fadeIn">
           {/* Source filter */}
           <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
+            <label htmlFor="filter-source" className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
               <Layers className="w-3 h-3" /> Lead Source
             </label>
             <select
+              id="filter-source"
               value={source}
               onChange={(e) => onSourceChange(e.target.value)}
               className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-1 focus:ring-blue-500"
@@ -184,10 +188,11 @@ export const LeadFilterBar: React.FC<LeadFilterBarProps> = ({
 
           {/* Course filter */}
           <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
+            <label htmlFor="filter-course" className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
               <Award className="w-3 h-3" /> Academic Course
             </label>
             <select
+              id="filter-course"
               value={course}
               onChange={(e) => onCourseChange(e.target.value)}
               className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-1 focus:ring-blue-500"
@@ -204,10 +209,11 @@ export const LeadFilterBar: React.FC<LeadFilterBarProps> = ({
           {/* Counsellor filter (Admin only) */}
           {currentUser?.role === 'ADMIN' && (
             <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
+              <label htmlFor="filter-counsellor" className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
                 <Users className="w-3 h-3" /> Assigned Counsellor
               </label>
               <select
+                id="filter-counsellor"
                 value={assignedTo}
                 onChange={(e) => onAssignedToChange(e.target.value)}
                 className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-1 focus:ring-blue-500"
@@ -226,10 +232,11 @@ export const LeadFilterBar: React.FC<LeadFilterBarProps> = ({
           {/* Date range filter */}
           <div className="flex items-center gap-2">
             <div className="flex-1">
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
+              <label htmlFor="filter-start-date" className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
                 <Calendar className="w-3 h-3" /> From Date
               </label>
               <input
+                id="filter-start-date"
                 type="date"
                 value={startDate}
                 onChange={(e) => onStartDateChange(e.target.value)}
@@ -237,10 +244,11 @@ export const LeadFilterBar: React.FC<LeadFilterBarProps> = ({
               />
             </div>
             <div className="flex-1">
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
+              <label htmlFor="filter-end-date" className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
                 <Calendar className="w-3 h-3" /> To Date
               </label>
               <input
+                id="filter-end-date"
                 type="date"
                 value={endDate}
                 onChange={(e) => onEndDateChange(e.target.value)}

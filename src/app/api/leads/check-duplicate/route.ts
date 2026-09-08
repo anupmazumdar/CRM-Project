@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
     const existingLeads = await prisma.lead.findMany({
       where: {
         OR: conditions,
+        ...(session.role === 'MEMBER' ? { assignedToId: session.id } : {}),
         ...(excludeId ? { id: { not: excludeId } } : {}),
       },
       select: {
@@ -52,10 +53,10 @@ export async function POST(request: NextRequest) {
       const match = existingLeads[0];
       const reasons: string[] = [];
       if (email && match.email?.toLowerCase() === email.trim().toLowerCase()) {
-        reasons.push(`Email (${email})`);
+        reasons.push(`Email (${email.trim()})`);
       }
       if (phone && match.phone === phone.trim()) {
-        reasons.push(`Phone (${phone})`);
+        reasons.push(`Phone (${phone.trim()})`);
       }
 
       return NextResponse.json({

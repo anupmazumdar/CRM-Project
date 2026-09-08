@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { GraduationCap, Lock, Mail, ArrowRight, ShieldCheck, UserCheck, AlertCircle } from 'lucide-react';
+import { GraduationCap, Lock, Mail, ArrowRight, ShieldCheck, UserCheck, AlertCircle, X, HelpCircle, CheckCircle2 } from 'lucide-react';
+
+import { loginSchema } from '@/lib/validation';
 
 function LoginFormContent() {
   const router = useRouter();
@@ -12,17 +14,45 @@ function LoginFormContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [isLoading, setIsLoading] = useState(false);
+
+  // Forgot Password modal state
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSubmitted, setForgotSubmitted] = useState(false);
+
+  // Escape key handler for Forgot Password modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showForgotPassword) {
+        setShowForgotPassword(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showForgotPassword]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      setError('Please enter both email and password.');
+    setFieldErrors({});
+    setError('');
+
+    // Client-side Zod validation parity
+    const validationResult = loginSchema.safeParse({ email, password });
+    if (!validationResult.success) {
+      const errMap: { email?: string; password?: string } = {};
+      validationResult.error.issues.forEach((issue) => {
+        const field = issue.path[0] as 'email' | 'password';
+        if (field && !errMap[field]) {
+          errMap[field] = issue.message;
+        }
+      });
+      setFieldErrors(errMap);
       return;
     }
 
     setIsLoading(true);
-    setError('');
 
     try {
       const res = await fetch('/api/auth/login', {
@@ -51,6 +81,7 @@ function LoginFormContent() {
     setEmail(demoEmail);
     setPassword(demoPass);
     setError('');
+    setFieldErrors({});
   };
 
   return (
@@ -77,43 +108,82 @@ function LoginFormContent() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+            <label
+              htmlFor="login-email"
+              className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5"
+            >
               Work Email
             </label>
             <div className="relative">
               <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
+                id="login-email"
                 type="email"
                 required
+                disabled={isLoading}
                 placeholder="name@college.edu"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-800/80 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:ring-2 focus:ring-blue-500 outline-none transition"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                }}
+                className={`w-full pl-10 pr-4 py-2.5 text-sm bg-slate-800/80 border rounded-xl text-white placeholder:text-slate-500 focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-50 ${
+                  fieldErrors.email ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-700'
+                }`}
               />
             </div>
+            {fieldErrors.email && (
+              <p className="mt-1 text-xs text-red-400">{fieldErrors.email}</p>
+            )}
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-              Password
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label
+                htmlFor="login-password"
+                className="block text-xs font-semibold uppercase tracking-wider text-slate-400"
+              >
+                Password
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setForgotEmail(email);
+                  setForgotSubmitted(false);
+                  setShowForgotPassword(true);
+                }}
+                className="text-xs text-blue-400 hover:text-blue-300 transition"
+              >
+                Forgot Password?
+              </button>
+            </div>
             <div className="relative">
               <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
+                id="login-password"
                 type="password"
                 required
+                disabled={isLoading}
                 placeholder="••••••••"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-800/80 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:ring-2 focus:ring-blue-500 outline-none transition"
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                }}
+                className={`w-full pl-10 pr-4 py-2.5 text-sm bg-slate-800/80 border rounded-xl text-white placeholder:text-slate-500 focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-50 ${
+                  fieldErrors.password ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-700'
+                }`}
               />
             </div>
+            {fieldErrors.password && (
+              <p className="mt-1 text-xs text-red-400">{fieldErrors.password}</p>
+            )}
           </div>
 
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-bold rounded-xl transition shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 mt-2"
+            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-bold rounded-xl transition shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -126,8 +196,8 @@ function LoginFormContent() {
           </button>
         </form>
 
-        {/* Quick Demo Logins (Collapsible & Configurable) */}
-        {process.env.NEXT_PUBLIC_SHOW_DEMO_LOGINS !== 'false' && (
+        {/* Quick Demo Logins (Opt-in only: strictly process.env.NEXT_PUBLIC_SHOW_DEMO_LOGINS === 'true') */}
+        {process.env.NEXT_PUBLIC_SHOW_DEMO_LOGINS === 'true' && (
           <div className="mt-8 pt-6 border-t border-slate-800 space-y-3">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 text-center">
               Quick One-Click Demo Access
@@ -136,7 +206,8 @@ function LoginFormContent() {
               <button
                 type="button"
                 onClick={() => fillQuickDemo('admin@college.edu', 'admin123')}
-                className="p-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl text-left transition group"
+                disabled={isLoading}
+                className="p-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl text-left transition group disabled:opacity-50"
               >
                 <div className="flex items-center gap-1.5 text-purple-400 text-xs font-bold">
                   <ShieldCheck className="w-3.5 h-3.5" />
@@ -148,7 +219,8 @@ function LoginFormContent() {
               <button
                 type="button"
                 onClick={() => fillQuickDemo('priya@college.edu', 'counsellor123')}
-                className="p-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl text-left transition group"
+                disabled={isLoading}
+                className="p-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl text-left transition group disabled:opacity-50"
               >
                 <div className="flex items-center gap-1.5 text-blue-400 text-xs font-bold">
                   <UserCheck className="w-3.5 h-3.5" />
@@ -156,6 +228,98 @@ function LoginFormContent() {
                 </div>
                 <div className="text-[10px] text-slate-400 mt-0.5 truncate">priya@college.edu</div>
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Forgot Password Modal */}
+        {showForgotPassword && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="forgot-password-modal-title"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn"
+          >
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2 text-white font-bold text-sm">
+                  <HelpCircle className="w-4 h-4 text-blue-400" />
+                  <span id="forgot-password-modal-title">Password Recovery</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(false)}
+                  className="p-1 text-slate-400 hover:text-white rounded-lg transition"
+                  aria-label="Close dialog"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {forgotSubmitted ? (
+                <div className="space-y-3 py-2 text-center">
+                  <div className="w-10 h-10 mx-auto rounded-full bg-emerald-950/60 border border-emerald-800 flex items-center justify-center text-emerald-400">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <h4 className="text-sm font-bold text-white">Reset Request Logged</h4>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    A reset request for <span className="text-white font-medium">{forgotEmail}</span> has been registered. Admissions Administrators can reset counsellor credentials directly from the <span className="text-white font-semibold">Team Management</span> panel.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(false)}
+                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition mt-2"
+                  >
+                    Return to Sign In
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Enter your registered college email address to initiate password recovery assistance from your Admissions Administrator.
+                  </p>
+
+                  <div>
+                    <label htmlFor="forgot-email" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                      Staff Email Address
+                    </label>
+                    <input
+                      id="forgot-email"
+                      type="email"
+                      required
+                      placeholder="counsellor@college.edu"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      className="w-full px-3.5 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-slate-800/60 rounded-xl border border-slate-700/60 text-[11px] text-slate-400 leading-relaxed">
+                    <strong className="text-slate-300">Administrative Note:</strong> For institution privacy, password resets are verified and applied by admissions managers.
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotPassword(false)}
+                      className="w-1/2 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (forgotEmail.trim()) {
+                          setForgotSubmitted(true);
+                        }
+                      }}
+                      className="w-1/2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition shadow-md shadow-blue-500/20"
+                    >
+                      Request Reset
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

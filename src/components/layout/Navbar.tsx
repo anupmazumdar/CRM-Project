@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, Bell, LogOut, Plus, ShieldCheck, User } from 'lucide-react';
+import { Menu, Bell, LogOut, Plus, ShieldCheck, User, Settings as SettingsIcon } from 'lucide-react';
 import { UserSession } from '@/lib/types';
 import Link from 'next/link';
 
@@ -83,13 +83,27 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </div>
 
+          <Link
+            href="/settings"
+            className="p-2 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition"
+            title="Account Settings & Password"
+            aria-label="Account Settings"
+          >
+            <SettingsIcon className="w-4 h-4" />
+          </Link>
+
           <button
             onClick={handleLogout}
             disabled={isLoggingOut}
             title="Logout of CRM"
-            className="p-2 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl transition"
+            aria-label="Logout of CRM"
+            className="p-2 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl transition disabled:opacity-50"
           >
-            <LogOut className="w-4 h-4" />
+            {isLoggingOut ? (
+              <span className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin inline-block" />
+            ) : (
+              <LogOut className="w-4 h-4" />
+            )}
           </button>
         </div>
       </div>

@@ -16,13 +16,15 @@ This document records the manual and automated validation results performed on t
 | **TC-10** | Activity Logging | Record Call & Next Action | Type: `Call`, Notes: `"Fee structure discussed"`, Next Action: `"WhatsApp brochure"` | Entry renders on chronological timeline with counsellor attribution and timestamp | **PASS** |
 | **TC-11** | Follow-Up Engine | Auto-tag Calculation | Target dates: `< today`, `== today`, `> today` | Badges render `Overdue` (red), `Due Today` (yellow), and `Upcoming` (green) dynamically | **PASS** |
 | **TC-12** | Dashboard | Live Query Metrics & Charts | Query `/api/dashboard` | All counts computed from DB queries (0 hardcoded values); Recharts render correctly | **PASS** |
-| **TC-13** | Team Scorecard | Counsellor Performance Grouping | Query `/api/team` | Team table aggregates leads, contacted, converted, overdue, and conversion % per counsellor | **PASS** |
+| **TC-13** | Team Scorecard | Counsellor Performance Grouping (Admin) | Admin queries `/api/team` | Team table aggregates leads, contacted, converted, overdue, and conversion % per counsellor | **PASS** |
 | **TC-14** | Reporting | Channel ROI & SLA Compliance | Query `/api/reports` | Computes conversion rate, lead source breakdown, and follow-up on-time compliance rate | **PASS** |
 | **TC-15** | Export | CSV Download | Click "Export" in Leads list | Generates well-formatted CSV with all filtered student fields | **PASS** |
+| **TC-16** | Strict RBAC | Team Scorecard Access Restriction | Member queries `/api/team` | Returns HTTP 403 Forbidden; team management restricted to Admins | **PASS** |
+| **TC-17** | Student Privacy | Duplicate Check Privacy Isolation | Member checks duplicate for other counsellor's student | Duplicate flag returned with `existingLead: null`, preventing student details leakage | **PASS** |
 
 ## Automated Test Runner Execution
 
-All test cases were executed against the live production server via `npx tsx scripts/test-e2e.ts`.
+All test cases were executed against an isolated disposable test database via `npm test` (`npx tsx scripts/test-e2e.ts`).
 
-**Result:** 13/13 automated test suites passed (100% success rate).
+**Result:** 15/15 automated test suites passed (100% success rate). Disposable database cleanly provisioned and destroyed upon test completion.
 

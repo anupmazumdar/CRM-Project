@@ -4,6 +4,50 @@ import { createSessionToken, AUTH_COOKIE_NAME } from '@/lib/auth';
 import { comparePassword } from '@/lib/password';
 import { loginSchema } from '@/lib/validation';
 
+const MAX_FAILED_ATTEMPTS = 5;
+const FAILURE_WINDOW_MS = 15 * 60 * 1000;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
+
+type LoginAttempt = {
+  firstAttemptAt: number;
+  failedAttempts: number;
+  lockedUntil: number | null;
+};
+
+const loginAttempts = new Map<string, LoginAttempt>();
+
+function getAttemptKey(request: NextRequest, email: string): string {
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  const ip = forwardedFor?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
+  return `${email.toLowerCase()}:${ip}`;
+}
+
+function isLocked(key: string, now: number): boolean {
+  const attempt = loginAttempts.get(key);
+  if (!attempt) return false;
+
+  if (attempt.lockedUntil && attempt.lockedUntil > now) return true;
+  if (attempt.lockedUntil || now - attempt.firstAttemptAt > FAILURE_WINDOW_MS) {
+    loginAttempts.delete(key);
+  }
+
+  return false;
+}
+
+function recordFailedAttempt(key: string, now: number): void {
+  const existing = loginAttempts.get(key);
+  const attempt = !existing || now - existing.firstAttemptAt > FAILURE_WINDOW_MS
+    ? { firstAttemptAt: now, failedAttempts: 0, lockedUntil: null }
+    : existing;
+
+  attempt.failedAttempts += 1;
+  if (attempt.failedAttempts >= MAX_FAILED_ATTEMPTS) {
+    attempt.lockedUntil = now + LOCKOUT_DURATION_MS;
+  }
+
+  loginAttempts.set(key, attempt);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -17,24 +61,32 @@ export async function POST(request: NextRequest) {
     }
 
     const { email, password } = result.data;
+    const attemptKey = getAttemptKey(request, email);
+    const now = Date.now();
+
+    if (isLocked(attemptKey, now)) {
+      return NextResponse.json(
+        { error: 'Too many login attempts. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'Invalid credentials. User does not exist.' },
-        { status: 401 }
-      );
+      recordFailedAttempt(attemptKey, now);
+      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
     const isMatch = await comparePassword(password, user.passwordHash);
     if (!isMatch) {
-      return NextResponse.json(
-        { error: 'Invalid password. Please check your credentials.' },
-        { status: 401 }
-      );
+      recordFailedAttempt(attemptKey, now);
+      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
+
+    loginAttempts.delete(attemptKey);
 
     const sessionUser = {
       id: user.id,

@@ -17,26 +17,33 @@ import {
   ExternalLink,
   PlusCircle,
   User,
+  RotateCcw,
+  RefreshCw,
 } from 'lucide-react';
 
 export default function FollowUpsPage() {
   const [activeTab, setActiveTab] = useState<'OVERDUE' | 'DUE_TODAY' | 'UPCOMING' | 'ALL'>('ALL');
   const [leads, setLeads] = useState<LeadItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
 
   // Quick activity log modal
   const [selectedLeadForActivity, setSelectedLeadForActivity] = useState<LeadItem | null>(null);
 
   const fetchFollowUps = async () => {
     setIsLoading(true);
+    setError('');
     try {
       const res = await fetch('/api/leads?limit=200');
+      if (!res.ok) {
+        throw new Error('Failed to load scheduled follow-up queue.');
+      }
       const data = await res.json();
       if (data.leads) {
         setLeads(data.leads.filter((l: LeadItem) => l.nextFollowUpDate));
       }
-    } catch (err) {
-      console.error('Fetch follow-ups error:', err);
+    } catch (err: any) {
+      setError(err.message || 'Unable to connect to the follow-ups server.');
     } finally {
       setIsLoading(false);
     }
@@ -69,18 +76,47 @@ export default function FollowUpsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <div className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
-          <Clock className="w-3.5 h-3.5" />
-          <span>Follow-up SLA & Reminders</span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+            <Clock className="w-3.5 h-3.5" />
+            <span>Follow-up SLA & Reminders</span>
+          </div>
+          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white mt-0.5">
+            Follow-ups Task Queue
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Prioritize pending outreach, complete due reminders, and keep student conversations active.
+          </p>
         </div>
-        <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white mt-0.5">
-          Follow-ups Task Queue
-        </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Prioritize pending outreach, complete due reminders, and keep student conversations active.
-        </p>
+
+        <button
+          onClick={fetchFollowUps}
+          disabled={isLoading}
+          className="p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-600 dark:text-slate-300 rounded-xl shadow-sm transition disabled:opacity-50 self-start sm:self-center"
+          title="Refresh Queue"
+        >
+          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+        </button>
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="p-6 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-2xl text-center space-y-3">
+          <AlertCircle className="w-8 h-8 text-red-500 mx-auto" />
+          <h3 className="text-sm font-bold text-red-700 dark:text-red-300">
+            Failed to Load Follow-ups
+          </h3>
+          <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+          <button
+            onClick={fetchFollowUps}
+            className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition shadow-sm inline-flex items-center gap-1.5"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Try Again</span>
+          </button>
+        </div>
+      )}
 
       {/* Tabs / Metric Counters */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { X, UserPlus, Save, AlertCircle } from 'lucide-react';
 import { LEAD_SOURCES, COURSES_LIST, LEAD_STATUS_ORDER } from '@/lib/utils';
 import { LeadItem, UserSession } from '@/lib/types';
+import { leadSchema, leadCreateSchema } from '@/lib/validation';
+import { useModalFocus } from '@/components/common/useModalFocus';
 import { DuplicateWarningModal } from './DuplicateWarningModal';
 
 interface CounsellorOption {
@@ -55,11 +57,22 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
     existingLead: null,
   });
 
+  // Accessible focus trap and return-on-close management
+  const modalRef = useModalFocus({
+    isOpen,
+    onClose: () => {
+      if (!isSubmitting) onClose();
+    },
+  });
+
   // Fetch counsellors for assignment dropdown (if Admin)
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && currentUser?.role === 'ADMIN') {
       fetch('/api/team')
-        .then((res) => res.json())
+        .then((res) => {
+          if (!res.ok) return { team: [] };
+          return res.json();
+        })
         .then((data) => {
           if (data.team) {
             setCounsellors(data.team);
@@ -67,7 +80,7 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
         })
         .catch(() => {});
     }
-  }, [isOpen]);
+  }, [isOpen, currentUser?.role]);
 
   // Populate initial values
   useEffect(() => {
@@ -82,7 +95,7 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
         city: initialLead.city || '',
         source: initialLead.source || 'Website',
         status: initialLead.status || 'New',
-        assignedToId: initialLead.assignedToId || '',
+        assignedToId: initialLead.assignedToId || initialLead.assignedTo?.id || '',
         nextFollowUpDate: initialLead.nextFollowUpDate
           ? new Date(initialLead.nextFollowUpDate).toISOString().slice(0, 16)
           : '',
@@ -114,50 +127,54 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Build full counsellor options including existing assignee if not yet in list
+  const counsellorOptions = [...counsellors];
+  if (
+    initialLead?.assignedTo &&
+    !counsellorOptions.some((c) => c.id === (initialLead.assignedToId || initialLead.assignedTo?.id))
+  ) {
+    counsellorOptions.push({
+      id: initialLead.assignedToId || initialLead.assignedTo.id,
+      name: initialLead.assignedTo.name,
+      email: initialLead.assignedTo.email,
+    });
+  }
+
+  // Client-side Zod validation parity matching src/lib/validation.ts
   const validate = () => {
-    const errs: Record<string, string> = {};
+    const validationData = {
+      ...formData,
+      gradYear: formData.gradYear ? Number(formData.gradYear) : null,
+      assignedToId: formData.assignedToId || null,
+      nextFollowUpDate: formData.nextFollowUpDate ? new Date(formData.nextFollowUpDate).toISOString() : null,
+      email: formData.email.trim() || '',
+      phone: formData.phone.trim() || '',
+      college: formData.college.trim() || '',
+      city: formData.city.trim() || '',
+      notes: formData.notes.trim() || '',
+    };
 
-    if (!formData.name.trim() || formData.name.trim().length < 2) {
-      errs.name = 'Full name is required (at least 2 characters)';
+    const schema = isEditing ? leadSchema : leadCreateSchema;
+    const result = schema.safeParse(validationData);
+
+    if (!result.success) {
+      const errs: Record<string, string> = {};
+      result.error.issues.forEach((issue) => {
+        const field = issue.path[0] ? String(issue.path[0]) : 'form';
+        if (!errs[field]) {
+          errs[field] = issue.message;
+        }
+        // If contact refinement triggered on email, also indicate on phone
+        if (field === 'email' && issue.message.includes('At least one contact method')) {
+          errs.phone = issue.message;
+        }
+      });
+      setErrors(errs);
+      return false;
     }
 
-    const hasEmail = formData.email.trim().length > 0;
-    const hasPhone = formData.phone.trim().length > 0;
-
-    if (!hasEmail && !hasPhone) {
-      errs.email = 'At least one contact method (Email or Phone) is required';
-      errs.phone = 'At least one contact method (Email or Phone) is required';
-    }
-
-    if (hasEmail) {
-      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailPattern.test(formData.email.trim())) {
-        errs.email = 'Please provide a valid email address (e.g. name@example.com)';
-      }
-    }
-
-    if (hasPhone) {
-      const phoneDigits = formData.phone.replace(/\D/g, '');
-      if (phoneDigits.length < 7 || phoneDigits.length > 15) {
-        errs.phone = 'Please enter a valid phone number (7-15 digits)';
-      }
-    }
-
-    if (!formData.course) {
-      errs.course = 'Please select an academic course';
-    }
-
-    if (!isEditing && formData.nextFollowUpDate) {
-      const selected = new Date(formData.nextFollowUpDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (selected < today) {
-        errs.nextFollowUpDate = 'Follow-up date for a new lead cannot be in the past';
-      }
-    }
-
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
+    setErrors({});
+    return true;
   };
 
   const handlePreSubmit = async (e: React.FormEvent) => {
@@ -185,8 +202,12 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
           });
           return;
         }
-      } catch (err) {
-        console.error('Error during duplicate check:', err);
+      } catch {
+        // Show visible error message to user rather than silent console.error
+        setErrors({
+          form: 'Warning: Duplicate contact check failed due to network error. You may submit again to proceed.',
+        });
+        return;
       }
     }
 
@@ -202,7 +223,8 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
 
       const payload = {
         ...formData,
-        gradYear: Number(formData.gradYear),
+        gradYear: formData.gradYear ? Number(formData.gradYear) : null,
+        assignedToId: formData.assignedToId || null,
         nextFollowUpDate: formData.nextFollowUpDate ? new Date(formData.nextFollowUpDate).toISOString() : null,
       };
 
@@ -223,7 +245,7 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
       onSuccess(data.lead);
       onClose();
     } catch {
-      setErrors({ form: 'Network error occurred. Please try again.' });
+      setErrors({ form: 'Network error occurred while saving record. Please try again.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -232,7 +254,13 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
   return (
     <>
       <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto animate-fadeIn">
-        <div className="relative w-full max-w-3xl my-8 p-6 sm:p-8 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800">
+        <div
+          ref={modalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="lead-modal-title"
+          className="relative w-full max-w-3xl my-8 p-6 sm:p-8 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800"
+        >
           {/* Header */}
           <div className="flex items-center justify-between pb-5 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-3">
@@ -240,7 +268,7 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
                 <UserPlus className="w-6 h-6" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                <h2 id="lead-modal-title" className="text-xl font-bold text-slate-900 dark:text-white">
                   {isEditing ? 'Edit Student Record' : 'Register New Student / Lead'}
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -250,7 +278,9 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
             </div>
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              disabled={isSubmitting}
+              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-50 min-h-[44px] min-w-[44px] flex items-center justify-center"
+              aria-label="Close modal"
             >
               <X className="w-5 h-5" />
             </button>
@@ -272,16 +302,21 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="lead-name" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Student Full Name <span className="text-red-500">*</span>
                   </label>
                   <input
+                    id="lead-name"
                     type="text"
                     required
+                    disabled={isSubmitting}
                     placeholder="e.g. Rahul Sharma"
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className={`w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition ${
+                    onChange={(e) => {
+                      setFormData({ ...formData, name: e.target.value });
+                      if (errors.name) setErrors((prev) => ({ ...prev, name: '' }));
+                    }}
+                    className={`w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-50 ${
                       errors.name ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200 dark:border-slate-700'
                     }`}
                   />
@@ -289,15 +324,20 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="lead-email" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Email Address
                   </label>
                   <input
+                    id="lead-email"
                     type="email"
+                    disabled={isSubmitting}
                     placeholder="e.g. rahul@gmail.com"
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className={`w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition ${
+                    onChange={(e) => {
+                      setFormData({ ...formData, email: e.target.value });
+                      if (errors.email) setErrors((prev) => ({ ...prev, email: '', phone: '' }));
+                    }}
+                    className={`w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-50 ${
                       errors.email ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200 dark:border-slate-700'
                     }`}
                   />
@@ -305,15 +345,20 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="lead-phone" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Phone / WhatsApp Number
                   </label>
                   <input
+                    id="lead-phone"
                     type="tel"
+                    disabled={isSubmitting}
                     placeholder="e.g. +91 98765 43210"
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className={`w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition ${
+                    onChange={(e) => {
+                      setFormData({ ...formData, phone: e.target.value });
+                      if (errors.phone) setErrors((prev) => ({ ...prev, phone: '', email: '' }));
+                    }}
+                    className={`w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-50 ${
                       errors.phone ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200 dark:border-slate-700'
                     }`}
                   />
@@ -321,28 +366,32 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="lead-city" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                     City / Location
                   </label>
                   <input
+                    id="lead-city"
                     type="text"
+                    disabled={isSubmitting}
                     placeholder="e.g. Bangalore, Mumbai"
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
+                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-50"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="lead-college" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Previous School / College
                   </label>
                   <input
+                    id="lead-college"
                     type="text"
+                    disabled={isSubmitting}
                     placeholder="e.g. Delhi Public School / St. Xavier's"
                     value={formData.college}
                     onChange={(e) => setFormData({ ...formData, college: e.target.value })}
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
+                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -355,13 +404,20 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="lead-course" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Interested Course <span className="text-red-500">*</span>
                   </label>
                   <select
+                    id="lead-course"
+                    disabled={isSubmitting}
                     value={formData.course}
-                    onChange={(e) => setFormData({ ...formData, course: e.target.value })}
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
+                    onChange={(e) => {
+                      setFormData({ ...formData, course: e.target.value });
+                      if (errors.course) setErrors((prev) => ({ ...prev, course: '' }));
+                    }}
+                    className={`w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-50 ${
+                      errors.course ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200 dark:border-slate-700'
+                    }`}
                   >
                     {COURSES_LIST.map((c) => (
                       <option key={c} value={c}>
@@ -369,30 +425,41 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
                       </option>
                     ))}
                   </select>
+                  {errors.course && <p className="mt-1 text-xs text-red-500">{errors.course}</p>}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="lead-gradYear" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Target Graduation Year
                   </label>
                   <input
+                    id="lead-gradYear"
                     type="number"
-                    min="2022"
+                    min="2020"
                     max="2035"
+                    disabled={isSubmitting}
                     value={formData.gradYear}
-                    onChange={(e) => setFormData({ ...formData, gradYear: parseInt(e.target.value) || 2028 })}
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
+                    onChange={(e) => {
+                      setFormData({ ...formData, gradYear: parseInt(e.target.value) || 2028 });
+                      if (errors.gradYear) setErrors((prev) => ({ ...prev, gradYear: '' }));
+                    }}
+                    className={`w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-50 ${
+                      errors.gradYear ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200 dark:border-slate-700'
+                    }`}
                   />
+                  {errors.gradYear && <p className="mt-1 text-xs text-red-500">{errors.gradYear}</p>}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="lead-source" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Lead Source <span className="text-red-500">*</span>
                   </label>
                   <select
+                    id="lead-source"
+                    disabled={isSubmitting}
                     value={formData.source}
                     onChange={(e) => setFormData({ ...formData, source: e.target.value })}
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
+                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-50"
                   >
                     {LEAD_SOURCES.map((s) => (
                       <option key={s.value} value={s.value}>
@@ -403,13 +470,15 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="lead-status" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Pipeline Status <span className="text-red-500">*</span>
                   </label>
                   <select
+                    id="lead-status"
+                    disabled={isSubmitting}
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition font-medium"
+                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition font-medium disabled:opacity-50"
                   >
                     {LEAD_STATUS_ORDER.map((st) => (
                       <option key={st} value={st}>
@@ -420,17 +489,18 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="lead-assignedToId" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Assigned Counsellor {currentUser?.role !== 'ADMIN' && '(Fixed to you)'}
                   </label>
                   <select
-                    disabled={currentUser?.role !== 'ADMIN'}
+                    id="lead-assignedToId"
+                    disabled={currentUser?.role !== 'ADMIN' || isSubmitting}
                     value={formData.assignedToId}
                     onChange={(e) => setFormData({ ...formData, assignedToId: e.target.value })}
                     className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-60"
                   >
                     <option value="">Unassigned</option>
-                    {counsellors.map((c) => (
+                    {counsellorOptions.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name} ({c.email})
                       </option>
@@ -439,14 +509,19 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="lead-nextFollowUpDate" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Next Follow-up Due
                   </label>
                   <input
+                    id="lead-nextFollowUpDate"
                     type="datetime-local"
+                    disabled={isSubmitting}
                     value={formData.nextFollowUpDate}
-                    onChange={(e) => setFormData({ ...formData, nextFollowUpDate: e.target.value })}
-                    className={`w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition ${
+                    onChange={(e) => {
+                      setFormData({ ...formData, nextFollowUpDate: e.target.value });
+                      if (errors.nextFollowUpDate) setErrors((prev) => ({ ...prev, nextFollowUpDate: '' }));
+                    }}
+                    className={`w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-50 ${
                       errors.nextFollowUpDate ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200 dark:border-slate-700'
                     }`}
                   />
@@ -459,16 +534,24 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
 
             {/* Section 3: Initial Notes */}
             <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+              <label htmlFor="lead-notes" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Admissions Notes & Remarks
               </label>
               <textarea
+                id="lead-notes"
                 rows={3}
+                disabled={isSubmitting}
                 placeholder="Details about student preferences, scholarship eligibility, parent conversation notes..."
                 value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition resize-none"
+                onChange={(e) => {
+                  setFormData({ ...formData, notes: e.target.value });
+                  if (errors.notes) setErrors((prev) => ({ ...prev, notes: '' }));
+                }}
+                className={`w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition resize-none disabled:opacity-50 ${
+                  errors.notes ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200 dark:border-slate-700'
+                }`}
               />
+              {errors.notes && <p className="mt-1 text-xs text-red-500">{errors.notes}</p>}
             </div>
 
             {/* Actions */}
@@ -477,14 +560,14 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="px-5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition"
+                className="px-5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition disabled:opacity-50 min-h-[44px]"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-6 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition shadow-md shadow-blue-500/20 flex items-center gap-2"
+                className="px-6 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition shadow-md shadow-blue-500/20 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed min-h-[44px]"
               >
                 {isSubmitting ? (
                   <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -493,7 +576,7 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({
                 ) : (
                   <UserPlus className="w-4 h-4" />
                 )}
-                <span>{isEditing ? 'Update Student Record' : 'Create Student Lead'}</span>
+                <span>{isSubmitting ? 'Saving...' : isEditing ? 'Update Student Record' : 'Create Student Lead'}</span>
               </button>
             </div>
           </form>

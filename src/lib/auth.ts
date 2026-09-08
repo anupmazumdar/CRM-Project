@@ -3,9 +3,13 @@ import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import { UserSession } from './types';
 
-const SECRET_KEY = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'xyz-college-crm-super-secure-jwt-secret-key-2026-production'
-);
+const jwtSecret = process.env.JWT_SECRET;
+
+if (!jwtSecret || jwtSecret.trim().length === 0) {
+  throw new Error('FATAL: JWT_SECRET environment variable is missing or empty. A secure secret is required.');
+}
+
+const SECRET_KEY = new TextEncoder().encode(jwtSecret);
 
 export const AUTH_COOKIE_NAME = 'xyz_crm_token';
 

@@ -25,7 +25,7 @@ export default function StudentDetailError({
           Failed to Load Student Profile
         </h3>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          We encountered an issue loading this student's profile and communication history.
+          We encountered an issue loading this student&apos;s profile and communication history.
         </p>
       </div>
       {error?.message && (

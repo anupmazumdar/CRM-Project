@@ -249,7 +249,7 @@ export default function FollowUpsPage() {
 
                   {lead.notes && (
                     <p className="text-xs text-slate-600 dark:text-slate-400 pt-1 line-clamp-1 italic">
-                      "{lead.notes}"
+                      &ldquo;{lead.notes}&rdquo;
                     </p>
                   )}
                 </div>

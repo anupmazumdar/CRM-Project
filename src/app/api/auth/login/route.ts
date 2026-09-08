@@ -117,10 +117,20 @@ export async function POST(request: NextRequest) {
     });
 
     return response;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Login error:', error);
+
+    let errorMessage = 'An unexpected error occurred during login. Please try again.';
+    if (!process.env.DATABASE_URL) {
+      errorMessage = 'Database configuration error: DATABASE_URL is missing. Please configure it in Vercel Project Settings -> Environment Variables.';
+    } else if (!process.env.JWT_SECRET) {
+      errorMessage = 'Auth configuration error: JWT_SECRET is missing. Please configure it in Vercel Project Settings -> Environment Variables.';
+    } else if (error?.message && error.message.includes("Can't reach database server")) {
+      errorMessage = 'Database unreachable: Unable to connect to PostgreSQL. Please verify your DATABASE_URL in Vercel.';
+    }
+
     return NextResponse.json(
-      { error: 'An unexpected error occurred during login. Please try again.' },
+      { error: errorMessage },
       { status: 500 }
     );
   }

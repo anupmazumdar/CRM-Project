@@ -120,11 +120,22 @@ export default function StudentProfilePage() {
     setUpdatingFollowUp(true);
     setActionError('');
     try {
+      let isoDate: string | null = null;
+      if (inlineFollowUpDate && inlineFollowUpDate.trim()) {
+        const parsed = new Date(inlineFollowUpDate);
+        if (isNaN(parsed.getTime())) {
+          setActionError('Please select a valid date and time for the follow-up schedule.');
+          setUpdatingFollowUp(false);
+          return;
+        }
+        isoDate = parsed.toISOString();
+      }
+
       const res = await fetch(`/api/leads/${id}/follow-up`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nextFollowUpDate: inlineFollowUpDate ? new Date(inlineFollowUpDate).toISOString() : null,
+          nextFollowUpDate: isoDate,
         }),
       });
       const data = await res.json();
@@ -453,7 +464,9 @@ export default function StudentProfilePage() {
 
             <ActivityTimeline
               activities={lead.activities || []}
+              currentUser={currentUser}
               onAddActivityClick={() => setActivityModalOpen(true)}
+              onActivityDeleted={() => fetchLeadDetail()}
             />
           </div>
         </div>

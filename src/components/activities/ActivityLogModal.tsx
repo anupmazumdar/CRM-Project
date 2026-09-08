@@ -53,14 +53,37 @@ export const ActivityLogModal: React.FC<ActivityLogModalProps> = ({
     e.preventDefault();
     setError('');
 
+    let isoDate = '';
+    if (date) {
+      const parsedDate = new Date(date);
+      if (isNaN(parsedDate.getTime())) {
+        setError('Please select a valid date and time for this activity.');
+        return;
+      }
+      isoDate = parsedDate.toISOString();
+    } else {
+      setError('Date and time is required.');
+      return;
+    }
+
+    let isoFollowUp: string | null = null;
+    if (nextFollowUpDate && nextFollowUpDate.trim()) {
+      const parsedFollowUp = new Date(nextFollowUpDate);
+      if (isNaN(parsedFollowUp.getTime())) {
+        setError('Please select a valid date and time for the next follow-up.');
+        return;
+      }
+      isoFollowUp = parsedFollowUp.toISOString();
+    }
+
     // Client-side Zod validation parity matching src/lib/validation.ts
     const validationResult = activitySchema.safeParse({
       leadId,
       type,
-      date: date ? new Date(date).toISOString() : '',
+      date: isoDate,
       notes: notes.trim(),
       nextAction: nextAction.trim() || undefined,
-      nextFollowUpDate: nextFollowUpDate ? new Date(nextFollowUpDate).toISOString() : undefined,
+      nextFollowUpDate: isoFollowUp || undefined,
       updateStatusTo: updateStatusTo || undefined,
     });
 
@@ -78,10 +101,10 @@ export const ActivityLogModal: React.FC<ActivityLogModalProps> = ({
         body: JSON.stringify({
           leadId,
           type,
-          date: new Date(date).toISOString(),
+          date: isoDate,
           notes: notes.trim(),
           nextAction: nextAction.trim() || null,
-          nextFollowUpDate: nextFollowUpDate ? new Date(nextFollowUpDate).toISOString() : null,
+          nextFollowUpDate: isoFollowUp,
           updateStatusTo: updateStatusTo || undefined,
         }),
       });

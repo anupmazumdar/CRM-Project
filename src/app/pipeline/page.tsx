@@ -238,7 +238,7 @@ export default function PipelinePage() {
             return (
               <div
                 key={stage}
-                className={`flex-1 min-w-[260px] max-w-[320px] md:max-w-[280px] bg-slate-100/70 dark:bg-slate-900/60 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-3 flex flex-col max-h-[calc(100vh-220px)] shadow-sm ${
+                className={`flex-1 w-full md:w-auto min-w-[260px] md:max-w-[280px] bg-slate-100/70 dark:bg-slate-900/60 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-3 flex flex-col max-h-[calc(100vh-220px)] shadow-sm ${
                   isHiddenOnMobile ? 'hidden md:flex' : 'flex'
                 }`}
               >

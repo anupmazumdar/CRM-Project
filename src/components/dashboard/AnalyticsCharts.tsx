@@ -14,7 +14,7 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
-import { Layers, BarChart2, Calendar, UserCheck } from 'lucide-react';
+import { Layers, BarChart2, Calendar, UserCheck, Inbox } from 'lucide-react';
 
 interface AnalyticsChartsProps {
   leadsBySource: { source: string; count: number; percentage: number }[];
@@ -48,6 +48,11 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
   monthlyRegistrations,
   teamPerformance,
 }) => {
+  const hasMonthlyData = monthlyRegistrations && monthlyRegistrations.some((m) => m.leads > 0 || m.converted > 0);
+  const hasStatusData = leadsByStatus && leadsByStatus.some((s) => s.count > 0);
+  const hasSourceData = leadsBySource && leadsBySource.some((s) => s.count > 0);
+  const hasTeamData = teamPerformance && teamPerformance.some((t) => t.assigned > 0 || t.converted > 0);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* 1. Monthly Registration Trend */}
@@ -60,51 +65,63 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
           <span className="text-xs text-slate-400">Last 6 months</span>
         </div>
         <div className="h-64 w-full pt-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={monthlyRegistrations} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
-                </linearGradient>
-                <linearGradient id="colorConv" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-              <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#0f172a',
-                  borderColor: '#334155',
-                  borderRadius: '12px',
-                  color: '#fff',
-                  fontSize: '12px',
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
-              <Area
-                type="monotone"
-                dataKey="leads"
-                name="Total Inquiries"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorLeads)"
-              />
-              <Area
-                type="monotone"
-                dataKey="converted"
-                name="Enrolled / Converted"
-                stroke="#10b981"
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorConv)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          {!hasMonthlyData ? (
+            <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs border border-dashed border-slate-100 dark:border-slate-800 rounded-2xl p-4 text-center">
+              <Calendar className="w-8 h-8 text-slate-300 dark:text-slate-700 mb-2" />
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                No monthly registrations recorded yet
+              </span>
+              <span className="text-[11px] text-slate-400 mt-0.5">
+                Inflow trends will automatically appear as student applications are logged.
+              </span>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={monthlyRegistrations} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
+                  </linearGradient>
+                  <linearGradient id="colorConv" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#0f172a',
+                    borderColor: '#334155',
+                    borderRadius: '12px',
+                    color: '#fff',
+                    fontSize: '12px',
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
+                <Area
+                  type="monotone"
+                  dataKey="leads"
+                  name="Total Inquiries"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill="url(#colorLeads)"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="converted"
+                  name="Enrolled / Converted"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill="url(#colorConv)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
@@ -118,27 +135,39 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
           <span className="text-xs text-slate-400">Live counts</span>
         </div>
         <div className="h-64 w-full pt-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={leadsByStatus} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis dataKey="status" tick={{ fontSize: 10 }} stroke="#94a3b8" />
-              <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#0f172a',
-                  borderColor: '#334155',
-                  borderRadius: '12px',
-                  color: '#fff',
-                  fontSize: '12px',
-                }}
-              />
-              <Bar dataKey="count" name="Students" radius={[6, 6, 0, 0]}>
-                {leadsByStatus.map((entry, index) => (
-                  <Cell key={`status-${index}`} fill={entry.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          {!hasStatusData ? (
+            <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs border border-dashed border-slate-100 dark:border-slate-800 rounded-2xl p-4 text-center">
+              <BarChart2 className="w-8 h-8 text-slate-300 dark:text-slate-700 mb-2" />
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                Pipeline distribution is currently empty
+              </span>
+              <span className="text-[11px] text-slate-400 mt-0.5">
+                Stage breakdown (New, Contacted, Interested, Converted) will display here.
+              </span>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={leadsByStatus} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="status" tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#0f172a',
+                    borderColor: '#334155',
+                    borderRadius: '12px',
+                    color: '#fff',
+                    fontSize: '12px',
+                  }}
+                />
+                <Bar dataKey="count" name="Students" radius={[6, 6, 0, 0]}>
+                  {leadsByStatus.map((entry, index) => (
+                    <Cell key={`status-${index}`} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
@@ -152,38 +181,50 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
           <span className="text-xs text-slate-400">Volume & %</span>
         </div>
         <div className="h-64 w-full pt-2 flex items-center justify-center">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={leadsBySource}
-                cx="50%"
-                cy="50%"
-                innerRadius={55}
-                outerRadius={85}
-                paddingAngle={3}
-                dataKey="count"
-                nameKey="source"
-              >
-                {leadsBySource.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={SOURCE_COLORS[index % SOURCE_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(val: any, name: any, item: any) => [
-                  `${val} leads (${item.payload.percentage}%)`,
-                  item.payload.source,
-                ]}
-                contentStyle={{
-                  backgroundColor: '#0f172a',
-                  borderColor: '#334155',
-                  borderRadius: '12px',
-                  color: '#fff',
-                  fontSize: '12px',
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '4px' }} layout="horizontal" />
-            </PieChart>
-          </ResponsiveContainer>
+          {!hasSourceData ? (
+            <div className="h-full w-full flex flex-col items-center justify-center text-slate-400 text-xs border border-dashed border-slate-100 dark:border-slate-800 rounded-2xl p-4 text-center">
+              <Layers className="w-8 h-8 text-slate-300 dark:text-slate-700 mb-2" />
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                No acquisition channels active yet
+              </span>
+              <span className="text-[11px] text-slate-400 mt-0.5">
+                Channel breakdown (Website, Campus Event, Referral, Social) will show here.
+              </span>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={leadsBySource}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={55}
+                  outerRadius={85}
+                  paddingAngle={3}
+                  dataKey="count"
+                  nameKey="source"
+                >
+                  {leadsBySource.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={SOURCE_COLORS[index % SOURCE_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(val: any, name: any, item: any) => [
+                    `${val} leads (${item.payload.percentage}%)`,
+                    item.payload.source,
+                  ]}
+                  contentStyle={{
+                    backgroundColor: '#0f172a',
+                    borderColor: '#334155',
+                    borderRadius: '12px',
+                    color: '#fff',
+                    fontSize: '12px',
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '4px' }} layout="horizontal" />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
@@ -197,29 +238,41 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
           <span className="text-xs text-slate-400">Assigned vs Converted</span>
         </div>
         <div className="h-64 w-full pt-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={teamPerformance}
-              layout="vertical"
-              margin={{ top: 10, right: 20, left: 20, bottom: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-              <XAxis type="number" tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
-              <YAxis dataKey="counsellorName" type="category" tick={{ fontSize: 11 }} stroke="#94a3b8" width={90} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#0f172a',
-                  borderColor: '#334155',
-                  borderRadius: '12px',
-                  color: '#fff',
-                  fontSize: '12px',
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '6px' }} />
-              <Bar dataKey="assigned" name="Assigned Leads" fill="#93c5fd" radius={[0, 4, 4, 0]} />
-              <Bar dataKey="converted" name="Enrolled" fill="#10b981" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {!hasTeamData ? (
+            <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs border border-dashed border-slate-100 dark:border-slate-800 rounded-2xl p-4 text-center">
+              <UserCheck className="w-8 h-8 text-slate-300 dark:text-slate-700 mb-2" />
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                No counsellor lead allocations yet
+              </span>
+              <span className="text-[11px] text-slate-400 mt-0.5">
+                Assigned inquiries and conversion volume per staff member will populate here.
+              </span>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={teamPerformance}
+                layout="vertical"
+                margin={{ top: 10, right: 15, left: 10, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                <XAxis type="number" tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
+                <YAxis dataKey="counsellorName" type="category" tick={{ fontSize: 11 }} stroke="#94a3b8" width={85} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#0f172a',
+                    borderColor: '#334155',
+                    borderRadius: '12px',
+                    color: '#fff',
+                    fontSize: '12px',
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '6px' }} />
+                <Bar dataKey="assigned" name="Assigned Leads" fill="#93c5fd" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="converted" name="Enrolled" fill="#10b981" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
     </div>

@@ -12,7 +12,7 @@ import {
   Sparkles,
   Settings as SettingsIcon,
 } from 'lucide-react';
-import { UserSession } from '@/lib/types';
+import { UserSession } from '@/backend/types';
 
 interface SidebarProps {
   currentUser: UserSession | null;

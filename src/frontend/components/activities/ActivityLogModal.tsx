@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { X, PhoneCall, Mail, MessageCircle, Users, CalendarCheck, Save, AlertCircle } from 'lucide-react';
-import { ActivityItem, ActivityType, LeadStatus } from '@/lib/types';
-import { LEAD_STATUS_ORDER } from '@/lib/utils';
-import { activitySchema } from '@/lib/validation';
-import { useModalFocus } from '@/components/common/useModalFocus';
+import { ActivityItem, ActivityType, LeadStatus } from '@/backend/types';
+import { LEAD_STATUS_ORDER } from '@/frontend/utils/ui-helpers';
+import { activitySchema } from '@/database/validation';
+import { useModalFocus } from '@/frontend/hooks/useModalFocus';
 
 interface ActivityLogModalProps {
   isOpen: boolean;

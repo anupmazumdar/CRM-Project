@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
-import { UserSession, LeadItem } from '@/lib/types';
+import { UserSession, LeadItem } from '@/backend/types';
 import { LeadFormModal } from '../leads/LeadFormModal';
 import { usePathname, useRouter } from 'next/navigation';
 

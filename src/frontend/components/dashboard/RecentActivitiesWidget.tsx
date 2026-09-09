@@ -1,7 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
-import { ActivityItem } from '@/lib/types';
-import { formatDate, formatRelativeTime } from '@/lib/utils';
+import { ActivityItem } from '@/backend/types';
+import { formatDate, formatRelativeTime } from '@/frontend/utils/ui-helpers';
 import { History, PhoneCall, Mail, MessageCircle, Users, CalendarCheck, ArrowRight, User } from 'lucide-react';
 
 interface RecentActivitiesWidgetProps {

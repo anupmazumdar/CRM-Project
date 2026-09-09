@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Clock, Phone, MessageCircle, ArrowRight, User } from 'lucide-react';
 import { FollowUpBadge } from '../common/FollowUpBadge';
 import { StatusBadge } from '../common/StatusBadge';
-import { LeadItem, FollowUpStatus } from '@/lib/types';
+import { LeadItem, FollowUpStatus } from '@/backend/types';
 
 interface FollowUpWidgetProps {
   urgentFollowUps: (LeadItem & { followUpStatus: FollowUpStatus; daysDiff: number })[];

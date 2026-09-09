@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { LeadItem, ActivityItem, LeadStatus } from '@/lib/types';
-import { formatDate, getFollowUpStatus } from '@/lib/utils';
-import { FollowUpBadge } from '@/components/common/FollowUpBadge';
-import { StatusBadge } from '@/components/common/StatusBadge';
-import { ActivityLogModal } from '@/components/activities/ActivityLogModal';
+import { LeadItem, ActivityItem, LeadStatus } from '@/backend/types';
+import { formatDate, getFollowUpStatus } from '@/frontend/utils/ui-helpers';
+import { FollowUpBadge } from '@/frontend/components/common/FollowUpBadge';
+import { StatusBadge } from '@/frontend/components/common/StatusBadge';
+import { ActivityLogModal } from '@/frontend/components/activities/ActivityLogModal';
 import {
   Clock,
   AlertCircle,

@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { GraduationCap, Lock, Mail, ArrowRight, ShieldCheck, UserCheck, AlertCircle, X, HelpCircle, CheckCircle2 } from 'lucide-react';
 
-import { loginSchema } from '@/lib/validation';
+import { loginSchema } from '@/database/validation';
 
 function LoginFormContent() {
   const router = useRouter();

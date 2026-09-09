@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
-import { UserSession } from './types';
+import { UserSession } from '@/backend/types';
 
 export const AUTH_COOKIE_NAME = 'xyz_crm_token';
 

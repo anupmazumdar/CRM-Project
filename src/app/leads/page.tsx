@@ -3,14 +3,14 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { LeadItem, UserSession } from '@/lib/types';
-import { formatDate } from '@/lib/utils';
-import { StatusBadge } from '@/components/common/StatusBadge';
-import { FollowUpBadge } from '@/components/common/FollowUpBadge';
-import { SourceBadge } from '@/components/common/SourceBadge';
-import { LeadFilterBar } from '@/components/leads/LeadFilterBar';
-import { LeadFormModal } from '@/components/leads/LeadFormModal';
-import { ConfirmModal } from '@/components/common/ConfirmModal';
+import { LeadItem, UserSession } from '@/backend/types';
+import { formatDate } from '@/frontend/utils/ui-helpers';
+import { StatusBadge } from '@/frontend/components/common/StatusBadge';
+import { FollowUpBadge } from '@/frontend/components/common/FollowUpBadge';
+import { SourceBadge } from '@/frontend/components/common/SourceBadge';
+import { LeadFilterBar } from '@/frontend/components/leads/LeadFilterBar';
+import { LeadFormModal } from '@/frontend/components/leads/LeadFormModal';
+import { ConfirmModal } from '@/frontend/components/common/ConfirmModal';
 import {
   Users,
   Plus,

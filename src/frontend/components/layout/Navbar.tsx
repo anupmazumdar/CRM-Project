@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Menu, Bell, LogOut, Plus, ShieldCheck, User, Settings as SettingsIcon } from 'lucide-react';
-import { UserSession } from '@/lib/types';
+import { UserSession } from '@/backend/types';
 import Link from 'next/link';
 
 interface NavbarProps {

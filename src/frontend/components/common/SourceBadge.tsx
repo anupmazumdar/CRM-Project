@@ -1,5 +1,5 @@
 import React from 'react';
-import { getSourceInfo } from '@/lib/utils';
+import { getSourceInfo } from '@/frontend/utils/ui-helpers';
 import { Globe, MessageCircle, Users, Footprints, Share2, Mail, Award, HelpCircle } from 'lucide-react';
 
 interface SourceBadgeProps {

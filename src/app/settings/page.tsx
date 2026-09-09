@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { UserSession } from '@/lib/types';
+import { UserSession } from '@/backend/types';
 import {
   Settings,
   KeyRound,

@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { TeamMemberStats, UserSession } from '@/lib/types';
-import { userCreateSchema } from '@/lib/validation';
-import { useModalFocus } from '@/components/common/useModalFocus';
+import { TeamMemberStats, UserSession } from '@/backend/types';
+import { userCreateSchema } from '@/database/validation';
+import { useModalFocus } from '@/frontend/hooks/useModalFocus';
 import {
   UserCheck,
   UserPlus,

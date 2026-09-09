@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, RotateCcw, Download, ChevronDown, Calendar, Users, Layers, Award } from 'lucide-react';
-import { LEAD_SOURCES, COURSES_LIST, LEAD_STATUS_ORDER } from '@/lib/utils';
-import { UserSession } from '@/lib/types';
+import { LEAD_SOURCES, COURSES_LIST, LEAD_STATUS_ORDER } from '@/frontend/utils/ui-helpers';
+import { UserSession } from '@/backend/types';
 
 interface LeadFilterBarProps {
   search: string;

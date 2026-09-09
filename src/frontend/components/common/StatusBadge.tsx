@@ -1,6 +1,6 @@
 import React from 'react';
-import { getStatusInfo } from '@/lib/utils';
-import { LeadStatus } from '@/lib/types';
+import { getStatusInfo } from '@/frontend/utils/ui-helpers';
+import { LeadStatus } from '@/backend/types';
 
 interface StatusBadgeProps {
   status: LeadStatus | string;

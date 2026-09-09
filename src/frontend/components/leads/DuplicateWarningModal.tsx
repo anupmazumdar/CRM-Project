@@ -2,7 +2,7 @@ import React from 'react';
 import { AlertCircle, UserCheck, ExternalLink, X } from 'lucide-react';
 import Link from 'next/link';
 import { StatusBadge } from '../common/StatusBadge';
-import { useModalFocus } from '../common/useModalFocus';
+import { useModalFocus } from '@/frontend/hooks/useModalFocus';
 
 interface DuplicateWarningModalProps {
   isOpen: boolean;

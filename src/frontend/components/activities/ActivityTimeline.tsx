@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ActivityItem, ActivityType, UserSession } from '@/lib/types';
-import { formatDate, formatRelativeTime } from '@/lib/utils';
+import { ActivityItem, ActivityType, UserSession } from '@/backend/types';
+import { formatDate, formatRelativeTime } from '@/frontend/utils/ui-helpers';
 import {
   PhoneCall,
   Mail,

@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { StatCards } from '@/components/dashboard/StatCards';
-import { AnalyticsCharts } from '@/components/dashboard/AnalyticsCharts';
-import { FollowUpWidget } from '@/components/dashboard/FollowUpWidget';
-import { RecentActivitiesWidget } from '@/components/dashboard/RecentActivitiesWidget';
-import { DashboardMetrics } from '@/lib/types';
+import { StatCards } from '@/frontend/components/dashboard/StatCards';
+import { AnalyticsCharts } from '@/frontend/components/dashboard/AnalyticsCharts';
+import { FollowUpWidget } from '@/frontend/components/dashboard/FollowUpWidget';
+import { RecentActivitiesWidget } from '@/frontend/components/dashboard/RecentActivitiesWidget';
+import { DashboardMetrics } from '@/backend/types';
 import { RefreshCw, Sparkles, TrendingUp, AlertCircle, GraduationCap, UserPlus } from 'lucide-react';
 
 export default function DashboardPage() {

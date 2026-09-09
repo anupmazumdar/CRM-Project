@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, UserPlus, Save, AlertCircle } from 'lucide-react';
-import { LEAD_SOURCES, COURSES_LIST, LEAD_STATUS_ORDER } from '@/lib/utils';
-import { LeadItem, UserSession } from '@/lib/types';
-import { leadSchema, leadCreateSchema } from '@/lib/validation';
-import { useModalFocus } from '@/components/common/useModalFocus';
+import { LEAD_SOURCES, COURSES_LIST, LEAD_STATUS_ORDER } from '@/frontend/utils/ui-helpers';
+import { LeadItem, UserSession } from '@/backend/types';
+import { leadSchema, leadCreateSchema } from '@/database/validation';
+import { useModalFocus } from '@/frontend/hooks/useModalFocus';
 import { DuplicateWarningModal } from './DuplicateWarningModal';
 
 interface CounsellorOption {

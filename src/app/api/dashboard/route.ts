@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { getSessionUserFromRequest } from '@/lib/auth';
-import { getFollowUpStatus } from '@/lib/utils';
+import { prisma } from '@/database/prisma';
+import { getSessionUserFromRequest } from '@/security/auth';
+import { getFollowUpStatus } from '@/backend/utils/helpers';
 
 export const dynamic = 'force-dynamic';
 

@@ -1,16 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LeadItem, UserSession, ActivityItem, LeadStatus } from '@/lib/types';
-import { formatDate, LEAD_STATUS_ORDER } from '@/lib/utils';
-import { StatusBadge } from '@/components/common/StatusBadge';
-import { FollowUpBadge } from '@/components/common/FollowUpBadge';
-import { SourceBadge } from '@/components/common/SourceBadge';
-import { ActivityTimeline } from '@/components/activities/ActivityTimeline';
-import { ActivityLogModal } from '@/components/activities/ActivityLogModal';
-import { LeadFormModal } from '@/components/leads/LeadFormModal';
+import { LeadItem, UserSession, ActivityItem, LeadStatus } from '@/backend/types';
+import { formatDate, LEAD_STATUS_ORDER } from '@/frontend/utils/ui-helpers';
+import { StatusBadge } from '@/frontend/components/common/StatusBadge';
+import { FollowUpBadge } from '@/frontend/components/common/FollowUpBadge';
+import { SourceBadge } from '@/frontend/components/common/SourceBadge';
+import { ActivityTimeline } from '@/frontend/components/activities/ActivityTimeline';
+import { ActivityLogModal } from '@/frontend/components/activities/ActivityLogModal';
+import { LeadFormModal } from '@/frontend/components/leads/LeadFormModal';
 import {
   ArrowLeft,
   Phone,
@@ -61,7 +61,7 @@ export default function StudentProfilePage() {
       .catch(() => {});
   }, []);
 
-  const fetchLeadDetail = async () => {
+  const fetchLeadDetail = useCallback(async () => {
     setIsLoading(true);
     setError('');
     try {
@@ -82,13 +82,13 @@ export default function StudentProfilePage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     if (id) {
       fetchLeadDetail();
     }
-  }, [id]);
+  }, [id, fetchLeadDetail]);
 
   const handleQuickStatusChange = async (newStatus: string) => {
     if (!lead || updatingStatus) return;

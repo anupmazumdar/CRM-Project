@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { FollowUpStatus, LeadStatus, LeadSource, ActivityType } from './types';
+import { FollowUpStatus, LeadStatus, LeadSource, ActivityType } from '@/backend/types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

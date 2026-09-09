@@ -1,6 +1,6 @@
 import React from 'react';
 import { AlertTriangle, X } from 'lucide-react';
-import { useModalFocus } from './useModalFocus';
+import { useModalFocus } from '@/frontend/hooks/useModalFocus';
 
 interface ConfirmModalProps {
   isOpen: boolean;

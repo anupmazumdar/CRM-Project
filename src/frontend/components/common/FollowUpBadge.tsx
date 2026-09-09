@@ -1,5 +1,5 @@
 import React from 'react';
-import { getFollowUpStatus, getFollowUpTagInfo, formatDate } from '@/lib/utils';
+import { getFollowUpStatus, getFollowUpTagInfo, formatDate } from '@/frontend/utils/ui-helpers';
 import { Calendar, AlertCircle, Clock, CheckCircle } from 'lucide-react';
 
 interface FollowUpBadgeProps {

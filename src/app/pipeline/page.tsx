@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { LeadItem, LeadStatus, UserSession } from '@/lib/types';
-import { LEAD_STATUS_ORDER, getStatusInfo } from '@/lib/utils';
-import { FollowUpBadge } from '@/components/common/FollowUpBadge';
-import { SourceBadge } from '@/components/common/SourceBadge';
+import { LeadItem, LeadStatus, UserSession } from '@/backend/types';
+import { LEAD_STATUS_ORDER, getStatusInfo } from '@/frontend/utils/ui-helpers';
+import { FollowUpBadge } from '@/frontend/components/common/FollowUpBadge';
+import { SourceBadge } from '@/frontend/components/common/SourceBadge';
 import {
   Kanban,
   User,
@@ -17,7 +17,7 @@ import {
   X,
   RotateCcw,
 } from 'lucide-react';
-import { LeadFormModal } from '@/components/leads/LeadFormModal';
+import { LeadFormModal } from '@/frontend/components/leads/LeadFormModal';
 
 export default function PipelinePage() {
   const [leads, setLeads] = useState<LeadItem[]>([]);

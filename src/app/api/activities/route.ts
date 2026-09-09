@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/database/prisma';
 import { getSessionUserFromRequest } from '@/security/auth';
 import { activitySchema } from '@/database/validation';
+import { parsePaginationParams } from '@/backend/utils/pagination';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,8 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const leadId = searchParams.get('leadId');
-    const limit = parseInt(searchParams.get('limit') || '20', 10);
+    // VULN-05: Safely bounded pagination to prevent memory exhaustion / DoS
+    const { limit } = parsePaginationParams(searchParams, { defaultLimit: 20, maxLimit: 200 });
 
     const where: any = {};
 

@@ -4,6 +4,20 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
+  // INFO-01: Explicit production guard to prevent wiping or seeding demo credentials into production
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+  const allowDevSeed = process.env.ALLOW_SEED_DEV === 'true';
+
+  if (isProduction && !allowDevSeed) {
+    console.error(
+      '❌ BLOCKED: Database seeding aborted. Seeding demo accounts and mock data into a production environment is prohibited.'
+    );
+    console.error(
+      'If you intentionally need to populate a staging/demo database running in production mode, explicitly set ALLOW_SEED_DEV=true.'
+    );
+    process.exit(1);
+  }
+
   console.log('🌱 Starting CRM database seeding...');
 
   // Clean existing tables

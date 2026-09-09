@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/database/prisma';
 import { getSessionUserFromRequest } from '@/security/auth';
 import { hashPassword } from '@/security/password';
+import { validatePassword } from '@/security/password-policy';
+import { logSecurityEvent } from '@/security/audit';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,9 +27,11 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    if (!newPassword || newPassword.length < 6) {
+    // VULN-03: Centralized password policy validation
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.valid) {
       return NextResponse.json(
-        { error: 'New password must be at least 6 characters long.' },
+        { error: passwordValidation.message || 'Password does not meet security requirements.' },
         { status: 400 }
       );
     }
@@ -48,6 +52,13 @@ export async function PUT(request: NextRequest) {
     await prisma.user.update({
       where: { id: userId },
       data: { passwordHash },
+    });
+
+    logSecurityEvent({
+      type: 'PASSWORD_CHANGED',
+      userId: targetUser.id,
+      email: targetUser.email,
+      details: `Password administratively reset by Admin (${session.email})`,
     });
 
     return NextResponse.json({

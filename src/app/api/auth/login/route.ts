@@ -3,52 +3,10 @@ import { prisma } from '@/database/prisma';
 import { createSessionToken, AUTH_COOKIE_NAME } from '@/security/auth';
 import { comparePassword } from '@/security/password';
 import { loginSchema } from '@/database/validation';
+import { checkLoginRateLimit, getClientIp } from '@/security/rate-limit';
+import { logSecurityEvent } from '@/security/audit';
 
 export const dynamic = 'force-dynamic';
-
-const MAX_FAILED_ATTEMPTS = 5;
-const FAILURE_WINDOW_MS = 15 * 60 * 1000;
-const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
-
-type LoginAttempt = {
-  firstAttemptAt: number;
-  failedAttempts: number;
-  lockedUntil: number | null;
-};
-
-const loginAttempts = new Map<string, LoginAttempt>();
-
-function getAttemptKey(request: NextRequest, email: string): string {
-  const forwardedFor = request.headers.get('x-forwarded-for');
-  const ip = forwardedFor?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
-  return `${email.toLowerCase()}:${ip}`;
-}
-
-function isLocked(key: string, now: number): boolean {
-  const attempt = loginAttempts.get(key);
-  if (!attempt) return false;
-
-  if (attempt.lockedUntil && attempt.lockedUntil > now) return true;
-  if (attempt.lockedUntil || now - attempt.firstAttemptAt > FAILURE_WINDOW_MS) {
-    loginAttempts.delete(key);
-  }
-
-  return false;
-}
-
-function recordFailedAttempt(key: string, now: number): void {
-  const existing = loginAttempts.get(key);
-  const attempt = !existing || now - existing.firstAttemptAt > FAILURE_WINDOW_MS
-    ? { firstAttemptAt: now, failedAttempts: 0, lockedUntil: null }
-    : existing;
-
-  attempt.failedAttempts += 1;
-  if (attempt.failedAttempts >= MAX_FAILED_ATTEMPTS) {
-    attempt.lockedUntil = now + LOCKOUT_DURATION_MS;
-  }
-
-  loginAttempts.set(key, attempt);
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -63,13 +21,31 @@ export async function POST(request: NextRequest) {
     }
 
     const { email, password } = result.data;
-    const attemptKey = getAttemptKey(request, email);
-    const now = Date.now();
+    const clientIp = getClientIp(request);
 
-    if (isLocked(attemptKey, now)) {
+    // VULN-01: Persistent/distributed sliding-window rate limit (5 attempts per 15 minutes)
+    const rateLimit = await checkLoginRateLimit(request, email);
+
+    if (!rateLimit.success) {
+      logSecurityEvent({
+        type: 'RATE_LIMIT_EXCEEDED',
+        email,
+        ip: clientIp,
+        details: 'Login rate limit exceeded (5 attempts per 15 minutes)',
+      });
+
+      const retryAfterSeconds = Math.max(1, Math.ceil((rateLimit.reset - Date.now()) / 1000));
       return NextResponse.json(
         { error: 'Too many login attempts. Please try again later.' },
-        { status: 429 }
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(retryAfterSeconds),
+            'X-RateLimit-Limit': String(rateLimit.limit),
+            'X-RateLimit-Remaining': String(rateLimit.remaining),
+            'X-RateLimit-Reset': String(rateLimit.reset),
+          },
+        }
       );
     }
 
@@ -78,17 +54,32 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      recordFailedAttempt(attemptKey, now);
+      logSecurityEvent({
+        type: 'LOGIN_FAILURE',
+        email,
+        ip: clientIp,
+        details: 'Invalid email or password',
+      });
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
     const isMatch = await comparePassword(password, user.passwordHash);
     if (!isMatch) {
-      recordFailedAttempt(attemptKey, now);
+      logSecurityEvent({
+        type: 'LOGIN_FAILURE',
+        email,
+        ip: clientIp,
+        details: 'Invalid email or password',
+      });
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
-    loginAttempts.delete(attemptKey);
+    logSecurityEvent({
+      type: 'LOGIN_SUCCESS',
+      email: user.email,
+      userId: user.id,
+      ip: clientIp,
+    });
 
     const sessionUser = {
       id: user.id,
@@ -117,20 +108,12 @@ export async function POST(request: NextRequest) {
     });
 
     return response;
-  } catch (error: any) {
-    console.error('Login error:', error);
-
-    let errorMessage = 'An unexpected error occurred during login. Please try again.';
-    if (!process.env.DATABASE_URL) {
-      errorMessage = 'Database configuration error: DATABASE_URL is missing. Please configure it in Vercel Project Settings -> Environment Variables.';
-    } else if (!process.env.JWT_SECRET) {
-      errorMessage = 'Auth configuration error: JWT_SECRET is missing. Please configure it in Vercel Project Settings -> Environment Variables.';
-    } else if (error?.message && error.message.includes("Can't reach database server")) {
-      errorMessage = 'Database unreachable: Unable to connect to PostgreSQL. Please verify your DATABASE_URL in Vercel.';
-    }
+  } catch (error) {
+    // VULN-02: Server-side logging only; never expose infrastructure details or stack traces to clients
+    console.error('[Auth Service] Login internal error:', error instanceof Error ? error.message : 'Unknown error');
 
     return NextResponse.json(
-      { error: errorMessage },
+      { error: 'Login failed. Please try again later.' },
       { status: 500 }
     );
   }

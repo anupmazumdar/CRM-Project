@@ -49,8 +49,8 @@ export default function SettingsPage() {
 
     if (!newPassword) {
       errors.newPassword = 'New password is required.';
-    } else if (newPassword.length < 6) {
-      errors.newPassword = 'New password must be at least 6 characters.';
+    } else if (newPassword.length < 10) {
+      errors.newPassword = 'New password must be at least 10 characters.';
     }
 
     if (!confirmPassword) {
@@ -176,7 +176,7 @@ export default function SettingsPage() {
               <span>Password Guidelines</span>
             </div>
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              Use a secure password with at least 6 characters. Changing your password updates your account immediately across all active admissions portal sessions.
+              Use a secure password with at least 10 characters. Changing your password updates your account immediately across all active admissions portal sessions.
             </p>
           </div>
         </div>
@@ -270,7 +270,7 @@ export default function SettingsPage() {
                     }
                   }}
                   disabled={isSubmitting}
-                  placeholder="Minimum 6 characters"
+                  placeholder="Minimum 10 characters"
                   className={`w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none transition disabled:opacity-50 ${
                     fieldErrors.newPassword
                       ? 'border-rose-300 focus:ring-2 focus:ring-rose-500'

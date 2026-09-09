@@ -69,7 +69,9 @@ function LoginFormContent() {
         return;
       }
 
-      router.push(from);
+      // Security: Validate from path to prevent Open Redirect attacks
+      const safeFrom = from.startsWith('/') && !from.startsWith('//') ? from : '/';
+      router.push(safeFrom);
       router.refresh();
     } catch {
       setError('Unable to connect to server. Please try again.');

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { passwordPolicySchema } from '@/security/password-policy';
+export { passwordPolicySchema };
 
 export const phoneRegex = /^(\+?\d{1,4}[\s-]?)?\(?\d{1,4}\)?[\s-]?\d{1,4}[\s-]?\d{1,9}$/;
 
@@ -86,13 +88,13 @@ export const activitySchema = z.object({
 
 export const loginSchema = z.object({
   email: z.string().trim().email({ message: 'Valid email is required' }),
-  password: z.string().min(6, { message: 'Password must be at least 6 characters' }),
+  password: z.string().min(1, { message: 'Password is required' }),
 });
 
 export const userCreateSchema = z.object({
   name: z.string().trim().min(2, { message: 'Name must be at least 2 characters' }),
   email: z.string().trim().email({ message: 'Valid email is required' }),
-  password: z.string().min(6, { message: 'Password must be at least 6 characters' }),
+  password: passwordPolicySchema,
   role: z.enum(['ADMIN', 'MEMBER'], { errorMap: () => ({ message: 'Role must be ADMIN or MEMBER' }) }),
   department: z.string().trim().default('Admissions'),
 });

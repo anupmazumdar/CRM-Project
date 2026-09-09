@@ -4,6 +4,7 @@ import { getSessionUserFromRequest } from '@/security/auth';
 import { hashPassword } from '@/security/password';
 import { userCreateSchema } from '@/database/validation';
 import { getFollowUpStatus } from '@/backend/utils/helpers';
+import { parsePaginationParams } from '@/backend/utils/pagination';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,11 +23,11 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
-    // Sane cap: limit up to 200 per page to safeguard database memory
-    const requestedLimit = parseInt(searchParams.get('limit') || '100', 10);
-    const limit = Math.min(Math.max(1, requestedLimit), 200);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = parsePaginationParams(searchParams, {
+      defaultLimit: 100,
+      maxLimit: 200,
+      defaultPage: 1,
+    });
 
     // NOTE (Scalability): For large institutions with hundreds of counsellors, full cursor-based
     // or offset pagination should be used here. Default limit is capped at 100 users (max 200 per query).

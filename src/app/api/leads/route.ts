@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/database/prisma';
 import { getSessionUserFromRequest } from '@/security/auth';
 import { leadCreateSchema } from '@/database/validation';
+import { parsePaginationParams } from '@/backend/utils/pagination';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,10 +22,33 @@ export async function GET(request: NextRequest) {
     const followUpState = searchParams.get('followUpState');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
-    const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = parseInt(searchParams.get('limit') || '50', 10);
-    const sortBy = searchParams.get('sortBy') || 'createdAt';
-    const sortOrder = searchParams.get('sortOrder') === 'asc' ? 'asc' : 'desc';
+    const { page, limit, skip } = parsePaginationParams(searchParams, {
+      defaultLimit: 50,
+      maxLimit: 200,
+      defaultPage: 1,
+    });
+
+    // VULN-04: Strict allowlist of legitimate sortable fields
+    const ALLOWED_LEAD_SORT_FIELDS = [
+      'createdAt',
+      'updatedAt',
+      'name',
+      'email',
+      'phone',
+      'status',
+      'course',
+      'source',
+      'nextFollowUpDate',
+      'gradYear',
+    ] as const;
+
+    const rawSortBy = searchParams.get('sortBy');
+    const sortBy = ALLOWED_LEAD_SORT_FIELDS.includes(rawSortBy as any)
+      ? (rawSortBy as (typeof ALLOWED_LEAD_SORT_FIELDS)[number])
+      : 'createdAt';
+
+    const rawSortOrder = searchParams.get('sortOrder')?.toLowerCase();
+    const sortOrder: 'asc' | 'desc' = rawSortOrder === 'asc' ? 'asc' : 'desc';
 
     const where: any = {};
 
@@ -127,7 +151,7 @@ export async function GET(request: NextRequest) {
         orderBy: {
           [sortBy]: sortOrder,
         },
-        skip: (page - 1) * limit,
+        skip,
         take: limit,
       }),
     ]);

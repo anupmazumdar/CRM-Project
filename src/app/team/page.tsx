@@ -144,8 +144,8 @@ export default function TeamPage() {
     setResetError('');
     setResetSuccess('');
 
-    if (!resetPasswordValue || resetPasswordValue.length < 6) {
-      setResetError('New password must be at least 6 characters.');
+    if (!resetPasswordValue || resetPasswordValue.length < 10) {
+      setResetError('New password must be at least 10 characters.');
       return;
     }
 
@@ -882,7 +882,7 @@ export default function TeamPage() {
                   type="text"
                   required
                   disabled={isResetSubmitting}
-                  placeholder="At least 6 characters"
+                  placeholder="At least 10 characters"
                   value={resetPasswordValue}
                   onChange={(e) => setResetPasswordValue(e.target.value)}
                   className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 font-mono"
@@ -987,7 +987,7 @@ export default function TeamPage() {
                   type="password"
                   required
                   disabled={isSubmitting}
-                  placeholder="At least 6 characters"
+                  placeholder="At least 10 characters"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"

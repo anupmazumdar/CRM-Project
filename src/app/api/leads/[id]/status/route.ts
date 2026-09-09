@@ -5,9 +5,9 @@ import { getSessionUserFromRequest } from '@/security/auth';
 export const dynamic = 'force-dynamic';
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 const VALID_STATUSES = ['New', 'Contacted', 'Interested', 'Follow_up', 'Converted', 'Lost'];
@@ -19,7 +19,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     const { status, note } = body;
 

@@ -83,7 +83,7 @@ async function validateUserSession(session: UserSession | null): Promise<UserSes
 }
 
 export async function getSessionUser(): Promise<UserSession | null> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
   if (!token) return null;
   const session = await verifySessionToken(token);

@@ -37,6 +37,7 @@ export default function TeamPage() {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [resetMember, setResetMember] = useState<TeamMemberStats | null>(null);
   const [resetPasswordValue, setResetPasswordValue] = useState('');
+  const [resetAdminPassword, setResetAdminPassword] = useState('');
   const [resetError, setResetError] = useState('');
   const [resetSuccess, setResetSuccess] = useState('');
   const [isResetSubmitting, setIsResetSubmitting] = useState(false);
@@ -50,6 +51,7 @@ export default function TeamPage() {
     role: 'MEMBER' as 'ADMIN' | 'MEMBER',
     department: 'Admissions',
   });
+  const [addAdminPassword, setAddAdminPassword] = useState('');
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -61,6 +63,7 @@ export default function TeamPage() {
     department: 'Admissions',
     role: 'MEMBER' as 'ADMIN' | 'MEMBER',
   });
+  const [editAdminPassword, setEditAdminPassword] = useState('');
   const [editError, setEditError] = useState('');
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
 
@@ -149,6 +152,11 @@ export default function TeamPage() {
       return;
     }
 
+    if (!resetAdminPassword) {
+      setResetError('Admin password confirmation is required.');
+      return;
+    }
+
     setIsResetSubmitting(true);
     try {
       const res = await fetch('/api/team/reset-password', {
@@ -157,6 +165,7 @@ export default function TeamPage() {
         body: JSON.stringify({
           userId: resetMember.id,
           newPassword: resetPasswordValue,
+          adminPassword: resetAdminPassword,
         }),
       });
 
@@ -166,6 +175,7 @@ export default function TeamPage() {
       } else {
         setResetSuccess(data.message || 'Staff password successfully updated.');
         setResetPasswordValue('');
+        setResetAdminPassword('');
       }
     } catch {
       setResetError('Network error occurred while resetting password.');
@@ -178,8 +188,16 @@ export default function TeamPage() {
     e.preventDefault();
     setFormError('');
 
+    if (formData.role === 'ADMIN' && !addAdminPassword) {
+      setFormError('Your admin password is required to create an Administrator account.');
+      return;
+    }
+
     // Client-side Zod validation parity matching src/lib/validation.ts
-    const validationResult = userCreateSchema.safeParse(formData);
+    const validationResult = userCreateSchema.safeParse({
+      ...formData,
+      ...(formData.role === 'ADMIN' ? { adminPassword: addAdminPassword } : {}),
+    });
     if (!validationResult.success) {
       setFormError(validationResult.error.issues[0]?.message || 'Please check form for errors.');
       return;
@@ -191,7 +209,10 @@ export default function TeamPage() {
       const res = await fetch('/api/team', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          ...(formData.role === 'ADMIN' ? { adminPassword: addAdminPassword } : {}),
+        }),
       });
 
       const data = await res.json();
@@ -210,6 +231,7 @@ export default function TeamPage() {
         role: 'MEMBER',
         department: 'Admissions',
       });
+      setAddAdminPassword('');
       fetchTeam();
     } catch {
       setFormError('Network communication failed');
@@ -224,11 +246,21 @@ export default function TeamPage() {
     setIsEditSubmitting(true);
     setEditError('');
 
+    const roleChanged = editFormData.role !== editMember.role;
+    if (roleChanged && !editAdminPassword) {
+      setEditError('Your admin password is required to change user roles.');
+      setIsEditSubmitting(false);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/team/${editMember.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editFormData),
+        body: JSON.stringify({
+          ...editFormData,
+          ...(roleChanged ? { adminPassword: editAdminPassword } : {}),
+        }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -244,6 +276,7 @@ export default function TeamPage() {
       }
 
       setIsEditModalOpen(false);
+      setEditAdminPassword('');
       fetchTeam();
     } catch {
       setEditError('Network communication error while updating member profile.');
@@ -326,7 +359,11 @@ export default function TeamPage() {
 
           {currentUser?.role === 'ADMIN' && (
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => {
+                setAddAdminPassword('');
+                setFormError('');
+                setIsModalOpen(true);
+              }}
               className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold rounded-xl transition shadow-md shadow-blue-500/20 flex items-center gap-1.5 shrink-0 min-h-[44px]"
             >
               <UserPlus className="w-4 h-4" />
@@ -548,6 +585,7 @@ export default function TeamPage() {
                             onClick={() => {
                               setResetMember(member);
                               setResetPasswordValue('');
+                              setResetAdminPassword('');
                               setResetError('');
                               setResetSuccess('');
                               setIsResetModalOpen(true);
@@ -684,6 +722,24 @@ export default function TeamPage() {
                   />
                 </div>
               </div>
+
+              {editFormData.role !== editMember.role && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl space-y-1.5">
+                  <label htmlFor="edit-team-admin-password" className="block text-xs font-semibold text-amber-900 dark:text-amber-300">
+                    Your Admin Password * <span className="text-amber-700 dark:text-amber-400 font-normal">(Required to change user role)</span>
+                  </label>
+                  <input
+                    id="edit-team-admin-password"
+                    type="password"
+                    required
+                    disabled={isEditSubmitting}
+                    placeholder="Confirm your admin password"
+                    value={editAdminPassword}
+                    onChange={(e) => setEditAdminPassword(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
+                  />
+                </div>
+              )}
 
               <div className="mt-5 flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button
@@ -889,6 +945,25 @@ export default function TeamPage() {
                 />
               </div>
 
+              <div>
+                <label
+                  htmlFor="reset-admin-password"
+                  className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1"
+                >
+                  Your Admin Password * <span className="text-slate-400 font-normal">(Step-up security confirmation)</span>
+                </label>
+                <input
+                  id="reset-admin-password"
+                  type="password"
+                  required
+                  disabled={isResetSubmitting}
+                  placeholder="Enter your admin password"
+                  value={resetAdminPassword}
+                  onChange={(e) => setResetAdminPassword(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                />
+              </div>
+
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
@@ -1025,6 +1100,24 @@ export default function TeamPage() {
                   />
                 </div>
               </div>
+
+              {formData.role === 'ADMIN' && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl space-y-1.5">
+                  <label htmlFor="team-admin-password" className="block text-xs font-semibold text-amber-900 dark:text-amber-300">
+                    Your Admin Password * <span className="text-amber-700 dark:text-amber-400 font-normal">(Required to grant Administrator role)</span>
+                  </label>
+                  <input
+                    id="team-admin-password"
+                    type="password"
+                    required
+                    disabled={isSubmitting}
+                    placeholder="Enter your admin password"
+                    value={addAdminPassword}
+                    onChange={(e) => setAddAdminPassword(e.target.value)}
+                    className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
+                  />
+                </div>
+              )}
 
               <div className="mt-5 flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button

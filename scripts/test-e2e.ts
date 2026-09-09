@@ -394,7 +394,14 @@ async function main() {
 
     console.log('🌱 Seeding initial test data into disposable database...');
     execSync(`npx tsx prisma/seed.ts`, {
-      env: { ...process.env, DATABASE_URL: disposableDbUrl },
+      env: {
+        ...process.env,
+        DATABASE_URL: disposableDbUrl,
+        SEED_ADMIN_PASSWORD: 'admin123',
+        SEED_COUNSELLOR_PASSWORD: 'counsellor123',
+        ALLOW_SEED_DEV: 'true',
+        ALLOW_PROD_SEED: 'true',
+      },
       stdio: 'pipe',
     });
 

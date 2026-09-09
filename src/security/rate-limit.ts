@@ -52,11 +52,21 @@ function getUpstashLimiter(): Ratelimit | null {
       isUpstashInitialized = true;
       return upstashRatelimit;
     } catch (err) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[RateLimiter:Fatal] Upstash Redis initialization failed in production:', err);
+        throw new Error('Rate limiting service failure: Redis initialization failed');
+      }
       console.warn('[RateLimiter] Failed to initialize Upstash Redis. Falling back to local memory store:', err);
       isUpstashInitialized = true;
       upstashRatelimit = null;
       return null;
     }
+  }
+
+  // VULN-18: In production, Upstash Redis rate limiting is mandatory
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[RateLimiter:Fatal] Upstash Redis rate limiting is MANDATORY in production (NODE_ENV=production), but UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN is unconfigured.');
+    throw new Error('Rate limiting unconfigured in production: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required');
   }
 
   isUpstashInitialized = true;
@@ -86,11 +96,21 @@ function getUpstashIpLimiter(): Ratelimit | null {
       isUpstashIpInitialized = true;
       return upstashIpRatelimit;
     } catch (err) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[RateLimiter:Fatal] Upstash Redis IP limiter initialization failed in production:', err);
+        throw new Error('Rate limiting service failure: Redis IP limiter initialization failed');
+      }
       console.warn('[RateLimiter] Failed to initialize Upstash Redis IP limiter:', err);
       isUpstashIpInitialized = true;
       upstashIpRatelimit = null;
       return null;
     }
+  }
+
+  // VULN-18: In production, Upstash Redis rate limiting is mandatory
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[RateLimiter:Fatal] Upstash Redis IP rate limiting is MANDATORY in production (NODE_ENV=production), but UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN is unconfigured.');
+    throw new Error('Rate limiting unconfigured in production: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required');
   }
 
   isUpstashIpInitialized = true;
@@ -120,11 +140,21 @@ function getUpstashAccountActionLimiter(): Ratelimit | null {
       isUpstashAccountActionInitialized = true;
       return upstashAccountActionRatelimit;
     } catch (err) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[RateLimiter:Fatal] Upstash Redis Account Action limiter initialization failed in production:', err);
+        throw new Error('Rate limiting service failure: Redis Account Action limiter initialization failed');
+      }
       console.warn('[RateLimiter] Failed to initialize Upstash Redis Account Action limiter:', err);
       isUpstashAccountActionInitialized = true;
       upstashAccountActionRatelimit = null;
       return null;
     }
+  }
+
+  // VULN-18: In production, Upstash Redis rate limiting is mandatory
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[RateLimiter:Fatal] Upstash Redis Account Action rate limiting is MANDATORY in production (NODE_ENV=production), but UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN is unconfigured.');
+    throw new Error('Rate limiting unconfigured in production: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required');
   }
 
   isUpstashAccountActionInitialized = true;
@@ -185,16 +215,56 @@ export function resetMemoryRateLimit(identifier: string): void {
   memoryStore.delete(identifier);
 }
 
+/**
+ * VULN-17: IP Spoofing & Rate-Limit Bypass Prevention.
+ *
+ * Trust Assumptions:
+ * 1. Assumes deployment behind Vercel, Cloudflare, or trusted reverse proxies (e.g. AWS ALB/Nginx)
+ *    which set/sanitize platform headers:
+ *    - `request.ip`: Populated directly by Vercel/Next.js edge runtime from the TCP connection socket.
+ *    - `cf-connecting-ip`: Injected and overwritten by Cloudflare edge servers.
+ *    - `x-real-ip`: Set/overwritten by the perimeter reverse proxy.
+ * 2. If inspecting `X-Forwarded-For`, proxies in the forwarding chain append incoming hops to the right.
+ *    The first (leftmost) entry is untrusted client input and trivially spoofable (e.g. `X-Forwarded-For: <fake-ip>, <real-ip>`).
+ *    Taking the rightmost non-empty hop ensures we inspect the peer IP recorded by the trusted edge.
+ * 3. Fallback to '127.0.0.1' is permitted only in non-production environments (development and automated testing).
+ *    In production (`NODE_ENV === 'production'`), requests without a verifiable client IP are flagged and marked untrusted.
+ */
 export function getClientIp(request: NextRequest): string {
+  // 1. Direct platform property (Vercel / Edge runtime)
+  const directIp = (request as unknown as { ip?: string }).ip;
+  if (directIp && typeof directIp === 'string' && directIp.trim().length > 0) {
+    return directIp.trim();
+  }
+
+  // 2. Cloudflare connecting IP (trusted edge overwrite)
+  const cfConnectingIp = request.headers.get('cf-connecting-ip');
+  if (cfConnectingIp && cfConnectingIp.trim().length > 0) {
+    return cfConnectingIp.trim();
+  }
+
+  // 3. Trusted reverse proxy header (Vercel / Nginx / ALB)
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp && realIp.trim().length > 0) {
+    return realIp.trim();
+  }
+
+  // 4. Rightmost hop of X-Forwarded-For (perimeter proxy appends rather than prepends)
   const forwardedFor = request.headers.get('x-forwarded-for');
   if (forwardedFor) {
-    const firstIp = forwardedFor.split(',')[0].trim();
-    if (firstIp) return firstIp;
+    const hops = forwardedFor.split(',').map((s) => s.trim()).filter(Boolean);
+    if (hops.length > 0) {
+      const rightmost = hops[hops.length - 1];
+      if (rightmost) return rightmost;
+    }
   }
-  const realIp = request.headers.get('x-real-ip');
-  if (realIp) return realIp.trim();
-  const cfConnectingIp = request.headers.get('cf-connecting-ip');
-  if (cfConnectingIp) return cfConnectingIp.trim();
+
+  // 5. Fallback behavior: allow local loopback in dev/test, flag & mark untrusted in production
+  if (process.env.NODE_ENV === 'production') {
+    console.warn('[RateLimiter:Security] Missing or invalid client IP in production request. Flagged as untrusted-client-ip.');
+    return 'untrusted-client-ip';
+  }
+
   return '127.0.0.1';
 }
 
@@ -206,6 +276,14 @@ export function getClientIp(request: NextRequest): string {
  */
 export async function checkLoginRateLimit(request: NextRequest, email: string): Promise<RateLimitResult> {
   const ip = getClientIp(request);
+  if (ip === 'untrusted-client-ip' && process.env.NODE_ENV === 'production') {
+    return {
+      success: false,
+      limit: 0,
+      remaining: 0,
+      reset: Date.now() + WINDOW_MS,
+    };
+  }
   const normalizedEmail = email.toLowerCase().trim();
   const emailIpIdentifier = `login:${normalizedEmail}:${ip}`;
   const ipIdentifier = `login-ip:${ip}`;
@@ -224,9 +302,17 @@ export async function checkLoginRateLimit(request: NextRequest, email: string): 
         reset: res.reset,
       };
     } catch (err) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[RateLimiter:Fatal] Upstash Redis IP limiter check failed in production:', err);
+        throw new Error('Rate limit check unavailable');
+      }
       ipResult = checkMemoryRateLimit(ipIdentifier, MAX_IP_ATTEMPTS, now);
     }
   } else {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[RateLimiter:Fatal] Upstash Redis IP limiter unconfigured in production.');
+      throw new Error('Rate limiting unconfigured in production');
+    }
     ipResult = checkMemoryRateLimit(ipIdentifier, MAX_IP_ATTEMPTS, now);
   }
 
@@ -247,9 +333,17 @@ export async function checkLoginRateLimit(request: NextRequest, email: string): 
         reset: res.reset,
       };
     } catch (err) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[RateLimiter:Fatal] Upstash Redis email-IP limiter check failed in production:', err);
+        throw new Error('Rate limit check unavailable');
+      }
       emailIpResult = checkMemoryRateLimit(emailIpIdentifier, MAX_ATTEMPTS, now);
     }
   } else {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[RateLimiter:Fatal] Upstash Redis email-IP limiter unconfigured in production.');
+      throw new Error('Rate limiting unconfigured in production');
+    }
     emailIpResult = checkMemoryRateLimit(emailIpIdentifier, MAX_ATTEMPTS, now);
   }
 
@@ -275,8 +369,17 @@ export async function checkAccountActionRateLimit(userId: string): Promise<RateL
         reset: res.reset,
       };
     } catch (err) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[RateLimiter:Fatal] Upstash Redis account action limiter check failed in production:', err);
+        throw new Error('Rate limit check unavailable');
+      }
       return checkMemoryRateLimit(identifier, MAX_ACCOUNT_ACTION_ATTEMPTS, now);
     }
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[RateLimiter:Fatal] Upstash Redis account action limiter unconfigured in production.');
+    throw new Error('Rate limiting unconfigured in production');
   }
 
   return checkMemoryRateLimit(identifier, MAX_ACCOUNT_ACTION_ATTEMPTS, now);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/database/prisma';
 import { getSessionUserFromRequest } from '@/security/auth';
-import { hashPassword } from '@/security/password';
+import { hashPassword, comparePassword } from '@/security/password';
 import { validatePassword } from '@/security/password-policy';
 import { logSecurityEvent } from '@/security/audit';
 import { checkAccountActionRateLimit } from '@/security/rate-limit';
@@ -44,12 +44,31 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { userId, newPassword } = body;
+    const { userId, newPassword, adminPassword } = body;
 
     if (!userId) {
       return NextResponse.json(
         { error: 'Target user ID is required.' },
         { status: 400 }
+      );
+    }
+
+    // VULN-21: Step-up authentication required to reset team member passwords
+    if (!adminPassword || typeof adminPassword !== 'string') {
+      return NextResponse.json(
+        { error: 'Admin password confirmation is required to reset user passwords.' },
+        { status: 401 }
+      );
+    }
+
+    const actingAdmin = await prisma.user.findUnique({
+      where: { id: session.id },
+    });
+
+    if (!actingAdmin || !(await comparePassword(adminPassword, actingAdmin.passwordHash))) {
+      return NextResponse.json(
+        { error: 'Invalid admin password. Step-up authentication failed.' },
+        { status: 401 }
       );
     }
 

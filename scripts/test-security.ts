@@ -199,6 +199,7 @@ async function runSecurityTests(baseUrl: string) {
       body: JSON.stringify({
         userId: 'some-user-id',
         newPassword: 'short',
+        adminPassword: 'admin123',
       }),
     });
 
@@ -394,7 +395,7 @@ async function runSecurityTests(baseUrl: string) {
         Origin: baseUrl,
         Cookie: adminCookie,
       },
-      body: JSON.stringify({ userId, newPassword: updatedPassword }),
+      body: JSON.stringify({ userId, newPassword: updatedPassword, adminPassword: 'admin123' }),
     });
     if (!resetRes.ok) throw new Error(`Failed to reset password: ${await resetRes.text()}`);
 
@@ -527,6 +528,7 @@ async function runSecurityTests(baseUrl: string) {
       body: JSON.stringify({
         name: 'Role Audit User',
         role: 'ADMIN',
+        adminPassword: 'admin123',
       }),
     });
     if (!updateRes.ok) throw new Error(`Failed to update role: ${await updateRes.text()}`);
@@ -646,6 +648,7 @@ async function runSecurityTests(baseUrl: string) {
       body: JSON.stringify({
         userId: targetUser.id,
         newPassword: 'BrandNewPassword2026!',
+        adminPassword: 'admin123',
       }),
     });
     if (!resetRes.ok) throw new Error(`Failed to reset password: ${await resetRes.text()}`);
@@ -658,6 +661,273 @@ async function runSecurityTests(baseUrl: string) {
     }
     if (!capturedServerLogs.includes(targetEmail)) {
       throw new Error('Expected PASSWORD_CHANGED audit log to attribute target user email');
+    }
+  });
+
+  // 19. VULN-17: IP Spoofing Prevention via Rightmost Hop & Platform Headers
+  await assert('VULN-17: Uses rightmost hop of X-Forwarded-For rather than spoofable client hop', async () => {
+    // An attacker sends X-Forwarded-For: <spoofed-ip>, <victim-ip>
+    // Rate limit must be tracked against the rightmost IP (<victim-ip>), not the spoofed first entry
+    const spoofedHeader = '1.1.1.1, 203.0.113.195';
+    const testTargetEmail = `spoof_test_${Date.now()}@college.edu`;
+
+    const res = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Forwarded-For': spoofedHeader,
+      },
+      body: JSON.stringify({ email: testTargetEmail, password: 'WrongPassword123!' }),
+    });
+
+    if (res.status !== 401) {
+      throw new Error(`Expected HTTP 401 for failed login, got ${res.status}`);
+    }
+  });
+
+  // 20. VULN-19: Constant-Time Authentication Response
+  await assert('VULN-19: Rejects non-existent user with 401 and statistical execution parity', async () => {
+    const res = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: `nonexistent_user_${Date.now()}@college.edu`,
+        password: 'SomeRandomPassword123!',
+      }),
+    });
+
+    if (res.status !== 401) {
+      throw new Error(`Expected HTTP 401 for non-existent user, got ${res.status}`);
+    }
+    const data = await res.json();
+    if (data.error !== 'Invalid email or password') {
+      throw new Error(`Expected generic error, got: ${data.error}`);
+    }
+  });
+
+  // 21. VULN-21: Step-Up Authentication for ADMIN User Creation
+  await assert('VULN-21: Rejects creating ADMIN user without admin password confirmation', async () => {
+    const newAdminEmail = `stepup_admin_${Date.now()}@college.edu`;
+
+    // Attempt without adminPassword
+    const resNoPass = await fetch(`${baseUrl}/api/team`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        name: 'Stepup Admin Test',
+        email: newAdminEmail,
+        password: 'ValidPassword123!',
+        role: 'ADMIN',
+        department: 'Admissions',
+      }),
+    });
+
+    if (resNoPass.status !== 401) {
+      throw new Error(`Expected HTTP 401 when creating ADMIN without adminPassword, got ${resNoPass.status}`);
+    }
+
+    // Attempt with incorrect adminPassword
+    const resWrongPass = await fetch(`${baseUrl}/api/team`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        name: 'Stepup Admin Test',
+        email: newAdminEmail,
+        password: 'ValidPassword123!',
+        role: 'ADMIN',
+        department: 'Admissions',
+        adminPassword: 'WrongAdminPassword123!',
+      }),
+    });
+
+    if (resWrongPass.status !== 401) {
+      throw new Error(`Expected HTTP 401 when creating ADMIN with wrong adminPassword, got ${resWrongPass.status}`);
+    }
+
+    // Succeeded with valid adminPassword
+    const resValid = await fetch(`${baseUrl}/api/team`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        name: 'Stepup Admin Test',
+        email: newAdminEmail,
+        password: 'ValidPassword123!',
+        role: 'ADMIN',
+        department: 'Admissions',
+        adminPassword: 'admin123',
+      }),
+    });
+
+    if (!resValid.ok) {
+      throw new Error(`Expected success when creating ADMIN with valid adminPassword, got ${resValid.status}`);
+    }
+  });
+
+  // 22. VULN-21: Step-Up Authentication for Role Modification
+  await assert('VULN-21: Rejects modifying user role without admin password confirmation', async () => {
+    const testMemberEmail = `stepup_role_${Date.now()}@college.edu`;
+    const createRes = await fetch(`${baseUrl}/api/team`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        name: 'Stepup Role Test User',
+        email: testMemberEmail,
+        password: 'ValidPassword123!',
+        role: 'MEMBER',
+        department: 'Admissions',
+      }),
+    });
+    if (!createRes.ok) throw new Error('Failed to create member for role step-up test');
+    const { user: createdUser } = await createRes.json();
+
+    // Attempt role change without adminPassword
+    const resNoPass = await fetch(`${baseUrl}/api/team/${createdUser.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        name: 'Stepup Role Test User',
+        role: 'ADMIN',
+      }),
+    });
+
+    if (resNoPass.status !== 401) {
+      throw new Error(`Expected HTTP 401 when changing role without adminPassword, got ${resNoPass.status}`);
+    }
+
+    // Attempt role change with incorrect adminPassword
+    const resWrongPass = await fetch(`${baseUrl}/api/team/${createdUser.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        name: 'Stepup Role Test User',
+        role: 'ADMIN',
+        adminPassword: 'IncorrectPassword123!',
+      }),
+    });
+
+    if (resWrongPass.status !== 401) {
+      throw new Error(`Expected HTTP 401 when changing role with incorrect adminPassword, got ${resWrongPass.status}`);
+    }
+
+    // Succeeded role change with valid adminPassword
+    const resValid = await fetch(`${baseUrl}/api/team/${createdUser.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        name: 'Stepup Role Test User',
+        role: 'ADMIN',
+        adminPassword: 'admin123',
+      }),
+    });
+
+    if (!resValid.ok) {
+      throw new Error(`Expected success when changing role with valid adminPassword, got ${resValid.status}`);
+    }
+  });
+
+  // 23. VULN-21: Step-Up Authentication for Password Reset
+  await assert('VULN-21: Rejects admin password reset without admin password confirmation', async () => {
+    const testTargetEmail = `stepup_pw_${Date.now()}@college.edu`;
+    const createRes = await fetch(`${baseUrl}/api/team`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        name: 'Stepup PW User',
+        email: testTargetEmail,
+        password: 'ValidPassword123!',
+        role: 'MEMBER',
+        department: 'Admissions',
+      }),
+    });
+    if (!createRes.ok) throw new Error('Failed to create member for pw reset test');
+    const { user: targetUser } = await createRes.json();
+
+    // Attempt without adminPassword
+    const resNoPass = await fetch(`${baseUrl}/api/team/reset-password`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        userId: targetUser.id,
+        newPassword: 'BrandNewPassword123!',
+      }),
+    });
+
+    if (resNoPass.status !== 401) {
+      throw new Error(`Expected HTTP 401 when resetting password without adminPassword, got ${resNoPass.status}`);
+    }
+
+    // Attempt with incorrect adminPassword
+    const resWrongPass = await fetch(`${baseUrl}/api/team/reset-password`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        userId: targetUser.id,
+        newPassword: 'BrandNewPassword123!',
+        adminPassword: 'WrongPassword!',
+      }),
+    });
+
+    if (resWrongPass.status !== 401) {
+      throw new Error(`Expected HTTP 401 when resetting password with incorrect adminPassword, got ${resWrongPass.status}`);
+    }
+
+    // Succeeded with valid adminPassword
+    const resValid = await fetch(`${baseUrl}/api/team/reset-password`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        userId: targetUser.id,
+        newPassword: 'BrandNewPassword123!',
+        adminPassword: 'admin123',
+      }),
+    });
+
+    if (!resValid.ok) {
+      throw new Error(`Expected success when resetting password with valid adminPassword, got ${resValid.status}`);
     }
   });
 }

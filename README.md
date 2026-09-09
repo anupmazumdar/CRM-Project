@@ -118,16 +118,16 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## 🔑 Demo Login Credentials
+## 🔑 Initial User Accounts & Permissions
 
-The login page features **1-Click Quick Demo Login** buttons:
+Initial account credentials are generated uniquely at database initialization via `npm run db:seed` (which outputs randomized, cryptographically strong passwords to the console once upon generation) or provisioned directly through environment setup. Credentials must never be committed to version control, and default/demo credentials must never be reused in production.
 
-| Role | Email | Password | Permissions Scope |
+| Role | Email | Initial Password | Permissions Scope |
 | --- | --- | --- | --- |
-| **Admin (Admissions Dean)** | `admin@college.edu` | `admin123` | Full visibility across all leads, team scorecards, lead assignment, user creation, deletion, and reporting. |
-| **Counsellor (Senior Staff)** | `priya@college.edu` | `counsellor123` | Restricted visibility — views & updates only their assigned leads, logs activities, schedules follow-ups. |
-| **Counsellor (Staff)** | `rahul@college.edu` | `counsellor123` | Management admissions portfolio. |
-| **Counsellor (Staff)** | `ananya@college.edu` | `counsellor123` | Design & tech admissions portfolio. |
+| **Admin (Admissions Dean)** | `admin@college.edu` | Generated at seed time | Full visibility across all leads, team scorecards, lead assignment, user creation, deletion, and reporting. |
+| **Counsellor (Senior Staff)** | `priya@college.edu` | Generated at seed time | Restricted visibility — views & updates only their assigned leads, logs activities, schedules follow-ups. |
+| **Counsellor (Staff)** | `rahul@college.edu` | Generated at seed time | Management admissions portfolio. |
+| **Counsellor (Staff)** | `ananya@college.edu` | Generated at seed time | Design & tech admissions portfolio. |
 
 ---
 
@@ -225,9 +225,13 @@ In your terminal, set your remote `DATABASE_URL` and run:
 # Push schema tables to your cloud PostgreSQL database
 npx prisma db push
 
-# (Optional) Seed realistic college demo data
+# (Optional) Seed realistic college demo data for local/staging development only
 npm run db:seed
 ```
+
+> ⚠️ **CRITICAL SECURITY NOTICES FOR PRODUCTION:**
+> - **Production Seed Guard:** `npm run db:seed` will refuse to run against any production `DATABASE_URL` (`NODE_ENV=production`, `VERCEL=1`, or cloud hosts) to protect production data and prevent mock data insertion.
+> - **Mandatory Credential Rotation:** Any staging or production environment that was ever initialized or seeded using legacy demo credentials (`admin123`, `counsellor123`) must have those accounts' passwords rotated immediately via the self-service profile page or admin reset endpoint.
 
 ### 4. Deploy to Vercel
 
@@ -241,7 +245,9 @@ npm run db:seed
 3. Under **Environment Variables**, add:
    - `DATABASE_URL`: `postgres://username:password@ep-xyz.us-east-2.aws.neon.tech/neondb?sslmode=require`
    - `JWT_SECRET`: A secure random string (e.g. `openssl rand -base64 32`)
-   - `NEXT_PUBLIC_SHOW_DEMO_LOGINS`: `true` (set to `false` for strict production mode)
+   - `UPSTASH_REDIS_REST_URL`: Upstash Redis database REST URL (mandatory in production)
+   - `UPSTASH_REDIS_REST_TOKEN`: Upstash Redis database REST Token (mandatory in production)
+   - `NEXT_PUBLIC_SHOW_DEMO_LOGINS`: `"false"` for production mode
 4. Click **Deploy**! Vercel automatically runs `postinstall: prisma generate` and `next build`.
 
 ---

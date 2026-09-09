@@ -97,4 +97,5 @@ export const userCreateSchema = z.object({
   password: passwordPolicySchema,
   role: z.enum(['ADMIN', 'MEMBER'], { errorMap: () => ({ message: 'Role must be ADMIN or MEMBER' }) }),
   department: z.string().trim().default('Admissions'),
+  adminPassword: z.string().optional(),
 });

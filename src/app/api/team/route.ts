@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/database/prisma';
 import { getSessionUserFromRequest } from '@/security/auth';
-import { hashPassword } from '@/security/password';
+import { hashPassword, comparePassword } from '@/security/password';
 import { userCreateSchema } from '@/database/validation';
 import { getFollowUpStatus } from '@/backend/utils/helpers';
 import { parsePaginationParams } from '@/backend/utils/pagination';
@@ -124,7 +124,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, email, password, role, department } = result.data;
+    const { name, email, password, role, department, adminPassword } = result.data;
+
+    // VULN-21: Step-up authentication required to create an Administrator account
+    if (role === 'ADMIN') {
+      if (!adminPassword || typeof adminPassword !== 'string') {
+        return NextResponse.json(
+          { error: 'Admin password confirmation is required to create an Administrator account.' },
+          { status: 401 }
+        );
+      }
+
+      const actingAdmin = await prisma.user.findUnique({
+        where: { id: session.id },
+      });
+
+      if (!actingAdmin || !(await comparePassword(adminPassword, actingAdmin.passwordHash))) {
+        return NextResponse.json(
+          { error: 'Invalid admin password. Step-up authentication failed.' },
+          { status: 401 }
+        );
+      }
+    }
 
     const existingUser = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },

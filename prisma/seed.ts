@@ -1,19 +1,34 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
-async function main() {
-  // INFO-01: Explicit production guard to prevent wiping or seeding demo credentials into production
-  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
-  const allowDevSeed = process.env.ALLOW_SEED_DEV === 'true';
+function generateRandomSecurePassword(): string {
+  const bytes = crypto.randomBytes(12).toString('base64url');
+  return `Crm!${bytes}9#`;
+}
 
-  if (isProduction && !allowDevSeed) {
+async function main() {
+  // VULN-15 (extending INFO-01): Explicit production guard to prevent wiping or seeding credentials into production
+  const dbUrl = process.env.DATABASE_URL || '';
+  const isProduction =
+    process.env.NODE_ENV === 'production' ||
+    process.env.VERCEL === '1' ||
+    Boolean(process.env.NEXT_PUBLIC_APP_URL && !process.env.NEXT_PUBLIC_APP_URL.includes('localhost')) ||
+    (dbUrl.includes('neon.tech') && !dbUrl.includes('test_e2e')) ||
+    dbUrl.includes('supabase.co') ||
+    dbUrl.includes('rds.amazonaws.com');
+
+  const allowProdSeed =
+    process.env.ALLOW_PROD_SEED === 'true' || process.env.ALLOW_SEED_DEV === 'true';
+
+  if (isProduction && !allowProdSeed) {
     console.error(
-      '❌ BLOCKED: Database seeding aborted. Seeding demo accounts and mock data into a production environment is prohibited.'
+      '❌ BLOCKED: Database seeding aborted. Seeding demo accounts and mock data into a production environment or remote DATABASE_URL is prohibited.'
     );
     console.error(
-      'If you intentionally need to populate a staging/demo database running in production mode, explicitly set ALLOW_SEED_DEV=true.'
+      'If you intentionally need to populate a staging/demo database, explicitly set ALLOW_PROD_SEED=true.'
     );
     process.exit(1);
   }
@@ -25,9 +40,16 @@ async function main() {
   await prisma.lead.deleteMany({});
   await prisma.user.deleteMany({});
 
-  // 1. Create Users
-  const adminPassword = await bcrypt.hash('admin123', 10);
-  const counsellorPassword = await bcrypt.hash('counsellor123', 10);
+  // 1. Create Users with dynamically generated strong credentials
+  const adminPasswordPlain = process.env.SEED_ADMIN_PASSWORD || generateRandomSecurePassword();
+  const priyaPasswordPlain = process.env.SEED_COUNSELLOR_PASSWORD || generateRandomSecurePassword();
+  const rahulPasswordPlain = process.env.SEED_COUNSELLOR_PASSWORD || generateRandomSecurePassword();
+  const ananyaPasswordPlain = process.env.SEED_COUNSELLOR_PASSWORD || generateRandomSecurePassword();
+
+  const adminPassword = await bcrypt.hash(adminPasswordPlain, 10);
+  const priyaPassword = await bcrypt.hash(priyaPasswordPlain, 10);
+  const rahulPassword = await bcrypt.hash(rahulPasswordPlain, 10);
+  const ananyaPassword = await bcrypt.hash(ananyaPasswordPlain, 10);
 
   const admin = await prisma.user.create({
     data: {
@@ -43,7 +65,7 @@ async function main() {
     data: {
       name: 'Priya Sharma',
       email: 'priya@college.edu',
-      passwordHash: counsellorPassword,
+      passwordHash: priyaPassword,
       role: 'MEMBER',
       department: 'Engineering Admissions',
     },
@@ -53,7 +75,7 @@ async function main() {
     data: {
       name: 'Rahul Verma',
       email: 'rahul@college.edu',
-      passwordHash: counsellorPassword,
+      passwordHash: rahulPassword,
       role: 'MEMBER',
       department: 'Management Admissions',
     },
@@ -63,13 +85,21 @@ async function main() {
     data: {
       name: 'Ananya Iyer',
       email: 'ananya@college.edu',
-      passwordHash: counsellorPassword,
+      passwordHash: ananyaPassword,
       role: 'MEMBER',
       department: 'Design & Tech Admissions',
     },
   });
 
   console.log('✅ Created 4 Users (1 Admin, 3 Counsellors)');
+  console.log('───────────────────────────────────────────────────────────────────────────');
+  console.log('🔑 INITIAL SEEDED USER CREDENTIALS (Generated uniquely for this database run):');
+  console.log(`   👤 Admin:       admin@college.edu   | Password: ${adminPasswordPlain}`);
+  console.log(`   👤 Counsellor:  priya@college.edu   | Password: ${priyaPasswordPlain}`);
+  console.log(`   👤 Counsellor:  rahul@college.edu   | Password: ${rahulPasswordPlain}`);
+  console.log(`   👤 Counsellor:  ananya@college.edu  | Password: ${ananyaPasswordPlain}`);
+  console.log('   ⚠️  Store these securely. They are not hardcoded or committed to git.');
+  console.log('───────────────────────────────────────────────────────────────────────────');
 
   const counsellors = [priya, rahul, ananya];
 

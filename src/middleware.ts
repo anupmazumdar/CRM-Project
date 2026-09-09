@@ -104,6 +104,17 @@ export async function middleware(request: NextRequest) {
     return applySecurityHeaders(NextResponse.redirect(loginUrl));
   }
 
+  // VULN-20 / VULN-08: Token Revocation Architectural Boundary
+  // Middleware operates as a high-throughput, low-latency perimeter guard (Edge / Proxy runtime).
+  // It performs stateless cryptographic verification of the JWT signature and expiration via `jose`.
+  // State-based session revocation (`tokenVersion` check against PostgreSQL) is deliberately deferred
+  // to Node.js route handlers via `getSessionUserFromRequest(request)` / `getSessionUser()`.
+  //
+  // Rationale:
+  // 1. Prevents database connection pool exhaustion and latency degradation at the edge.
+  // 2. Guarantees fail-safe database queries in full Node.js runtime with pooled Prisma client.
+  // 3. All 15 sensitive API routes have been audited to confirm mandatory invocation of
+  //    `getSessionUserFromRequest()` rather than relying on request headers or middleware state.
   const user = await verifySessionToken(token);
 
   if (!user) {

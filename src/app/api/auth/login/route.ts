@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/database/prisma';
 import { createSessionToken, AUTH_COOKIE_NAME } from '@/security/auth';
-import { comparePassword } from '@/security/password';
+import { comparePassword, DUMMY_PASSWORD_HASH } from '@/security/password';
 import { loginSchema } from '@/database/validation';
 import { checkLoginRateLimit, getClientIp } from '@/security/rate-limit';
 import { logSecurityEvent } from '@/security/audit';
@@ -53,18 +53,13 @@ export async function POST(request: NextRequest) {
       where: { email: email.toLowerCase() },
     });
 
-    if (!user) {
-      logSecurityEvent({
-        type: 'LOGIN_FAILURE',
-        email,
-        ip: clientIp,
-        details: 'Invalid email or password',
-      });
-      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
-    }
+    // VULN-19: Mitigate timing attacks and user enumeration.
+    // Run comparePassword against a precomputed dummy hash when the user does not exist
+    // so response times are statistically indistinguishable regardless of user existence.
+    const passwordHash = user ? user.passwordHash : DUMMY_PASSWORD_HASH;
+    const isMatch = await comparePassword(password, passwordHash);
 
-    const isMatch = await comparePassword(password, user.passwordHash);
-    if (!isMatch) {
+    if (!user || !isMatch) {
       logSecurityEvent({
         type: 'LOGIN_FAILURE',
         email,

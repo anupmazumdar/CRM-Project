@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/database/prisma';
 import { getSessionUserFromRequest } from '@/security/auth';
 import { logSecurityEvent } from '@/security/audit';
+import { comparePassword } from '@/security/password';
 
 export const dynamic = 'force-dynamic';
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
     const user = await prisma.user.findUnique({
       where: { id },
       select: {
@@ -55,7 +56,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
     const targetUser = await prisma.user.findUnique({
       where: { id },
     });
@@ -90,6 +91,28 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     }
 
     const roleChanged = Boolean(role && role !== targetUser.role);
+
+    // VULN-21: Step-up authentication required to modify user roles
+    if (roleChanged) {
+      const adminPassword = body.adminPassword;
+      if (!adminPassword || typeof adminPassword !== 'string') {
+        return NextResponse.json(
+          { error: 'Admin password confirmation is required to change user roles.' },
+          { status: 401 }
+        );
+      }
+
+      const actingAdmin = await prisma.user.findUnique({
+        where: { id: session.id },
+      });
+
+      if (!actingAdmin || !(await comparePassword(adminPassword, actingAdmin.passwordHash))) {
+        return NextResponse.json(
+          { error: 'Invalid admin password. Step-up authentication failed.' },
+          { status: 401 }
+        );
+      }
+    }
 
     const updatedUser = await prisma.user.update({
       where: { id },
@@ -142,7 +165,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Prevent self-deletion
     if (session.id === id) {

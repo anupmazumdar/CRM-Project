@@ -4,9 +4,9 @@ import { getSessionUserFromRequest } from '@/security/auth';
 import { leadSchema } from '@/database/validation';
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const lead = await prisma.lead.findUnique({
       where: { id },
       include: {
@@ -75,7 +75,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const existingLead = await prisma.lead.findUnique({
       where: { id },
     });
@@ -155,7 +155,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const existingLead = await prisma.lead.findUnique({
       where: { id },
     });

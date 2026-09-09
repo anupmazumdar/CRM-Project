@@ -17,6 +17,7 @@ model User {
   passwordHash String
   role         String     @default("MEMBER") // "ADMIN" or "MEMBER"
   department   String?    @default("Admissions")
+  tokenVersion Int        @default(0)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 

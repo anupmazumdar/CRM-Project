@@ -16,6 +16,7 @@ interface SecurityTestResult {
 }
 
 const results: SecurityTestResult[] = [];
+let capturedServerLogs = '';
 
 async function assert(name: string, fn: () => Promise<void>) {
   try {
@@ -111,6 +112,19 @@ async function runSecurityTests(baseUrl: string) {
   // --- INTEGRATION & API LEVEL TESTS ---
   let adminCookie = '';
   let memberCookie = '';
+
+  const originalFetch = global.fetch;
+  global.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    if (headers.has('x-test-omit-origin')) {
+      headers.delete('x-test-omit-origin');
+      return originalFetch(input, { ...init, headers });
+    }
+    if (!headers.has('Origin') && !headers.has('origin') && !headers.has('Referer') && !headers.has('referer')) {
+      headers.set('Origin', baseUrl);
+    }
+    return originalFetch(input, { ...init, headers });
+  };
 
   // Login as Admin
   const adminRes = await fetch(`${baseUrl}/api/auth/login`, {
@@ -331,6 +345,321 @@ async function runSecurityTests(baseUrl: string) {
       throw new Error('passwordHash field detected in /api/team response');
     }
   });
+
+  // 12. VULN-08: Session revocation invalidates outstanding tokens upon password reset and logout
+  await assert('VULN-08: Token revoked after admin password reset and logout', async () => {
+    const testUserEmail = `revocation_test_${Date.now()}@college.edu`;
+    const initialPassword = 'InitialPassword123!';
+    const updatedPassword = 'NewSecurePassword2026!';
+
+    // 1. Admin creates fresh user
+    const createRes = await fetch(`${baseUrl}/api/team`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        name: 'Revocation Test User',
+        email: testUserEmail,
+        password: initialPassword,
+        role: 'MEMBER',
+        department: 'Admissions',
+      }),
+    });
+    if (!createRes.ok) throw new Error(`Failed to create test user: ${await createRes.text()}`);
+    const createData = await createRes.json();
+    const userId = createData.user.id;
+
+    // 2. Login as the new test user
+    const loginRes1 = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: baseUrl },
+      body: JSON.stringify({ email: testUserEmail, password: initialPassword }),
+    });
+    if (!loginRes1.ok) throw new Error('Failed to login as fresh test user');
+    const oldCookie = loginRes1.headers.get('set-cookie')?.split(';')[0];
+    if (!oldCookie) throw new Error('No cookie received for test user login');
+
+    // Verify session is currently active
+    const check1 = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: oldCookie } });
+    if (check1.status !== 200) throw new Error(`Expected 200 for active session, got ${check1.status}`);
+
+    // 3. Admin resets the user's password
+    const resetRes = await fetch(`${baseUrl}/api/team/reset-password`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({ userId, newPassword: updatedPassword }),
+    });
+    if (!resetRes.ok) throw new Error(`Failed to reset password: ${await resetRes.text()}`);
+
+    // 4. Old token must now be rejected with 401 Unauthorized
+    const check2 = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: oldCookie } });
+    if (check2.status !== 401) {
+      throw new Error(`Expected HTTP 401 for revoked session token after admin reset, got ${check2.status}`);
+    }
+
+    // 5. Fresh login with new password must succeed
+    const loginRes2 = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: baseUrl },
+      body: JSON.stringify({ email: testUserEmail, password: updatedPassword }),
+    });
+    if (!loginRes2.ok) throw new Error('Failed to login with new password');
+    const newCookie = loginRes2.headers.get('set-cookie')?.split(';')[0];
+    if (!newCookie) throw new Error('No cookie received for new login');
+
+    // Verify new session works
+    const check3 = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: newCookie } });
+    if (check3.status !== 200) throw new Error(`Expected 200 for new session, got ${check3.status}`);
+
+    // 6. Explicit logout
+    const logoutRes = await fetch(`${baseUrl}/api/auth/logout`, {
+      method: 'POST',
+      headers: { Origin: baseUrl, Cookie: newCookie },
+    });
+    if (!logoutRes.ok) throw new Error('Logout request failed');
+
+    // 7. Token before logout must now be revoked (401)
+    const check4 = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: newCookie } });
+    if (check4.status !== 401) {
+      throw new Error(`Expected HTTP 401 after logout revocation, got ${check4.status}`);
+    }
+  });
+
+  // 13. VULN-09: CSRF same-origin check denies mutations when Origin and Referer are absent (fail-closed)
+  await assert('VULN-09: Rejects state-changing mutations when Origin and Referer are absent (fail-closed)', async () => {
+    const res = await fetch(`${baseUrl}/api/leads`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-omit-origin': 'true',
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({ name: 'CSRF Missing Origin Test' }),
+    });
+
+    if (res.status !== 403) {
+      throw new Error(`Expected HTTP 403 Forbidden for mutation missing Origin/Referer, got ${res.status}`);
+    }
+  });
+
+  // 14. VULN-10: IP-level login rate limiting thwarts distributed email spraying
+  await assert('VULN-10: IP-level rate limiter triggers HTTP 429 when spraying different emails from one IP', async () => {
+    const sprayIp = `198.51.100.${Math.floor(Math.random() * 200) + 10}`;
+    let got429 = false;
+    let attempt429 = -1;
+
+    for (let i = 1; i <= 25; i++) {
+      const email = `spray_target_${i}_${Date.now()}@example.com`;
+      const res = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Forwarded-For': sprayIp,
+        },
+        body: JSON.stringify({ email, password: 'WrongPassword123!' }),
+      });
+
+      if (res.status === 429) {
+        got429 = true;
+        attempt429 = i;
+        break;
+      }
+    }
+
+    if (!got429) {
+      throw new Error('Expected 429 rate limit when spraying 25 distinct emails from one IP');
+    }
+    if (attempt429 > 21) {
+      throw new Error(`Expected 429 before 22nd attempt (limit is 20), but triggered on attempt ${attempt429}`);
+    }
+  });
+
+  // 15. VULN-11: Authorization: Bearer token is rejected (cookie authentication strictly required)
+  await assert('VULN-11: Rejects requests supplying valid JWT via Authorization: Bearer without cookie', async () => {
+    const rawJwt = adminCookie.replace(/^xyz_crm_token=/, '');
+
+    const res = await fetch(`${baseUrl}/api/leads`, {
+      headers: {
+        Authorization: `Bearer ${rawJwt}`,
+      },
+    });
+
+    if (res.status !== 401) {
+      throw new Error(`Expected HTTP 401 Unauthorized for Bearer token auth, got ${res.status}`);
+    }
+  });
+
+  // 16. VULN-12: Role change logs a ROLE_CHANGED security audit event
+  await assert('VULN-12: Changing user role records a structured ROLE_CHANGED audit log', async () => {
+    const testMemberEmail = `role_audit_${Date.now()}@college.edu`;
+    const createRes = await fetch(`${baseUrl}/api/team`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        name: 'Role Audit User',
+        email: testMemberEmail,
+        password: 'Password123!Secure',
+        role: 'MEMBER',
+        department: 'Admissions',
+      }),
+    });
+    if (!createRes.ok) throw new Error(`Failed to create test user: ${await createRes.text()}`);
+    const { user: createdUser } = await createRes.json();
+
+    const updateRes = await fetch(`${baseUrl}/api/team/${createdUser.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        name: 'Role Audit User',
+        role: 'ADMIN',
+      }),
+    });
+    if (!updateRes.ok) throw new Error(`Failed to update role: ${await updateRes.text()}`);
+
+    // Wait briefly for server stdout stream to flush
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    if (!capturedServerLogs.includes('ROLE_CHANGED')) {
+      throw new Error('Expected server logs to contain ROLE_CHANGED security event');
+    }
+    if (!capturedServerLogs.includes(createdUser.id) && !capturedServerLogs.includes(testMemberEmail)) {
+      throw new Error('Expected ROLE_CHANGED audit log to record target user id or email');
+    }
+  });
+
+  // 17. VULN-13: Rate limiting on password-change endpoints
+  await assert('VULN-13: Rejects rapid password change attempts with HTTP 429 after ceiling (10 attempts)', async () => {
+    const testEmail = `pw_rate_test_${Date.now()}@college.edu`;
+    const userPass = 'ValidInitialPass123!';
+    const createRes = await fetch(`${baseUrl}/api/team`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        name: 'PW Rate Limit User',
+        email: testEmail,
+        password: userPass,
+        role: 'MEMBER',
+        department: 'Admissions',
+      }),
+    });
+    if (!createRes.ok) throw new Error(`Failed to create test user: ${await createRes.text()}`);
+
+    const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: baseUrl },
+      body: JSON.stringify({ email: testEmail, password: userPass }),
+    });
+    if (!loginRes.ok) throw new Error('Failed to login for password rate limit test');
+    const userCookie = loginRes.headers.get('set-cookie')?.split(';')[0];
+    if (!userCookie) throw new Error('No cookie received for test user');
+
+    for (let i = 1; i <= 10; i++) {
+      const res = await fetch(`${baseUrl}/api/account/password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: baseUrl,
+          Cookie: userCookie,
+        },
+        body: JSON.stringify({
+          currentPassword: `WrongPassword_${i}!`,
+          newPassword: 'BrandNewValidPass123!',
+          confirmPassword: 'BrandNewValidPass123!',
+        }),
+      });
+
+      if (res.status !== 400) {
+        throw new Error(`Expected HTTP 400 on attempt ${i}, got ${res.status}`);
+      }
+    }
+
+    const res11 = await fetch(`${baseUrl}/api/account/password`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: userCookie,
+      },
+      body: JSON.stringify({
+        currentPassword: 'WrongPassword_11!',
+        newPassword: 'BrandNewValidPass123!',
+        confirmPassword: 'BrandNewValidPass123!',
+      }),
+    });
+
+    if (res11.status !== 429) {
+      throw new Error(`Expected HTTP 429 on 11th password change attempt, got ${res11.status}`);
+    }
+    const data = await res11.json();
+    if (!data.error || !data.error.includes('Too many')) {
+      throw new Error(`Expected rate limit error message on 11th attempt, got: ${JSON.stringify(data)}`);
+    }
+  });
+
+  // 18. VULN-14: Administrative reset logs explicit audit details with admin & target user attribution
+  await assert('VULN-14: Admin password reset outputs explicit audit event attributing admin and target user', async () => {
+    const targetEmail = `audit_pw_reset_${Date.now()}@college.edu`;
+    const createRes = await fetch(`${baseUrl}/api/team`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        name: 'Audit PW Reset User',
+        email: targetEmail,
+        password: 'InitialPassword123!',
+        role: 'MEMBER',
+        department: 'Admissions',
+      }),
+    });
+    if (!createRes.ok) throw new Error(`Failed to create test user: ${await createRes.text()}`);
+    const { user: targetUser } = await createRes.json();
+
+    const resetRes = await fetch(`${baseUrl}/api/team/reset-password`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: baseUrl,
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        userId: targetUser.id,
+        newPassword: 'BrandNewPassword2026!',
+      }),
+    });
+    if (!resetRes.ok) throw new Error(`Failed to reset password: ${await resetRes.text()}`);
+
+    // Wait briefly for stdout stream to flush
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    if (!capturedServerLogs.includes('PASSWORD_CHANGED')) {
+      throw new Error('Expected server logs to contain PASSWORD_CHANGED event');
+    }
+    if (!capturedServerLogs.includes(targetEmail)) {
+      throw new Error('Expected PASSWORD_CHANGED audit log to attribute target user email');
+    }
+  });
 }
 
 async function main() {
@@ -350,6 +679,13 @@ async function main() {
         PORT: String(testPort),
       },
       stdio: 'pipe',
+    });
+
+    serverProcess.stdout?.on('data', (chunk) => {
+      capturedServerLogs += chunk.toString();
+    });
+    serverProcess.stderr?.on('data', (chunk) => {
+      capturedServerLogs += chunk.toString();
     });
 
     const isReady = await waitForServer(testUrl, 45000);

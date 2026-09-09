@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const session = await getSessionUserFromRequest(request);
 
     if (!session) {
-      return NextResponse.json({ user: null }, { status: 200 });
+      return NextResponse.json({ error: 'Unauthorized. Please login.' }, { status: 401 });
     }
 
     const user = await prisma.user.findUnique({
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({ user: null }, { status: 200 });
+      return NextResponse.json({ error: 'User account not found.' }, { status: 401 });
     }
 
     return NextResponse.json({ user });

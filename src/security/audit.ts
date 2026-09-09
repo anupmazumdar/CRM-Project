@@ -6,7 +6,8 @@ export type SecurityEventType =
   | 'PASSWORD_RESET_ATTEMPT'
   | 'PASSWORD_CHANGED'
   | 'CSRF_BLOCKED'
-  | 'UNAUTHORIZED_ACCESS_ATTEMPT';
+  | 'UNAUTHORIZED_ACCESS_ATTEMPT'
+  | 'ROLE_CHANGED';
 
 export interface SecurityEventPayload {
   type: SecurityEventType;
@@ -16,6 +17,12 @@ export interface SecurityEventPayload {
   path?: string;
   details?: string;
   timestamp?: string;
+  adminId?: string;
+  adminEmail?: string;
+  targetUserId?: string;
+  targetEmail?: string;
+  previousRole?: string;
+  newRole?: string;
 }
 
 /**

@@ -4,6 +4,7 @@ import { getSessionUserFromRequest } from '@/security/auth';
 import { hashPassword } from '@/security/password';
 import { validatePassword } from '@/security/password-policy';
 import { logSecurityEvent } from '@/security/audit';
+import { checkAccountActionRateLimit } from '@/security/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,31 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(
         { error: 'Forbidden. Only Admissions Administrators can reset user passwords.' },
         { status: 403 }
+      );
+    }
+
+    // VULN-13: Rate limit admin password resets (10 attempts per 15 minutes per admin)
+    const rateLimit = await checkAccountActionRateLimit(session.id);
+    if (!rateLimit.success) {
+      logSecurityEvent({
+        type: 'RATE_LIMIT_EXCEEDED',
+        userId: session.id,
+        email: session.email,
+        details: 'Admin password reset rate limit exceeded (10 attempts per 15 minutes)',
+      });
+
+      const retryAfterSeconds = Math.max(1, Math.ceil((rateLimit.reset - Date.now()) / 1000));
+      return NextResponse.json(
+        { error: 'Too many password reset attempts. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(retryAfterSeconds),
+            'X-RateLimit-Limit': String(rateLimit.limit),
+            'X-RateLimit-Remaining': String(rateLimit.remaining),
+            'X-RateLimit-Reset': String(rateLimit.reset),
+          },
+        }
       );
     }
 
@@ -51,15 +77,27 @@ export async function PUT(request: NextRequest) {
 
     await prisma.user.update({
       where: { id: userId },
-      data: { passwordHash },
+      data: {
+        passwordHash,
+        tokenVersion: { increment: 1 },
+      } as any,
     });
 
     logSecurityEvent({
       type: 'PASSWORD_CHANGED',
       userId: targetUser.id,
       email: targetUser.email,
-      details: `Password administratively reset by Admin (${session.email})`,
+      adminId: session.id,
+      adminEmail: session.email,
+      targetUserId: targetUser.id,
+      targetEmail: targetUser.email,
+      details: `Password administratively reset for user ${targetUser.email} (${targetUser.id}) by Admin ${session.email} (${session.id})`,
     });
+
+    // TODO: [VULN-14] Integrate transactional notification service (e.g. Resend, SendGrid, or AWS SES).
+    // When an administrator resets a user's password, dispatch a security alert to the affected user's
+    // email (targetUser.email) alerting them that their credentials were reset by an administrator.
+    // CRITICAL REQUIREMENT: Never include the new password, reset links, or tokens in the notification body.
 
     return NextResponse.json({
       success: true,

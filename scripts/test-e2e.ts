@@ -77,6 +77,15 @@ async function waitForServer(url: string, timeoutMs = 60000): Promise<boolean> {
 async function runTests(baseUrl: string) {
   console.log(`🚀 Executing E2E Test Suite against: ${baseUrl}\n`);
 
+  const originalFetch = global.fetch;
+  global.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    if (!headers.has('Origin') && !headers.has('origin')) {
+      headers.set('Origin', baseUrl);
+    }
+    return originalFetch(input, { ...init, headers });
+  };
+
   let adminCookie = '';
   let memberCookie = '';
   let memberUserId = '';

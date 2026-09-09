@@ -4,6 +4,7 @@ import { getSessionUserFromRequest } from '@/security/auth';
 import { hashPassword, comparePassword } from '@/security/password';
 import { validatePassword } from '@/security/password-policy';
 import { logSecurityEvent } from '@/security/audit';
+import { checkAccountActionRateLimit } from '@/security/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,31 @@ export async function PUT(request: NextRequest) {
     const session = await getSessionUserFromRequest(request);
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized. Please log in.' }, { status: 401 });
+    }
+
+    // VULN-13: Rate limit password changes (10 attempts per 15 minutes per user)
+    const rateLimit = await checkAccountActionRateLimit(session.id);
+    if (!rateLimit.success) {
+      logSecurityEvent({
+        type: 'RATE_LIMIT_EXCEEDED',
+        userId: session.id,
+        email: session.email,
+        details: 'Account password change rate limit exceeded (10 attempts per 15 minutes)',
+      });
+
+      const retryAfterSeconds = Math.max(1, Math.ceil((rateLimit.reset - Date.now()) / 1000));
+      return NextResponse.json(
+        { error: 'Too many password change attempts. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(retryAfterSeconds),
+            'X-RateLimit-Limit': String(rateLimit.limit),
+            'X-RateLimit-Remaining': String(rateLimit.remaining),
+            'X-RateLimit-Reset': String(rateLimit.reset),
+          },
+        }
+      );
     }
 
     const body = await request.json();
@@ -67,7 +93,10 @@ export async function PUT(request: NextRequest) {
 
     await prisma.user.update({
       where: { id: session.id },
-      data: { passwordHash: newPasswordHash },
+      data: {
+        passwordHash: newPasswordHash,
+        tokenVersion: { increment: 1 },
+      } as any,
     });
 
     logSecurityEvent({

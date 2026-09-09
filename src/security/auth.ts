@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import { UserSession } from '@/backend/types';
+import { prisma } from '@/database/prisma';
 
 export const AUTH_COOKIE_NAME = 'xyz_crm_token';
 
@@ -23,6 +24,7 @@ export async function createSessionToken(user: UserSession): Promise<string> {
     email: user.email,
     role: user.role,
     department: user.department,
+    tokenVersion: user.tokenVersion ?? 0,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -39,8 +41,43 @@ export async function verifySessionToken(token: string): Promise<UserSession | n
       email: payload.email as string,
       role: payload.role as 'ADMIN' | 'MEMBER',
       department: (payload.department as string) || null,
+      tokenVersion: typeof payload.tokenVersion === 'number' ? payload.tokenVersion : 0,
     };
   } catch {
+    return null;
+  }
+}
+
+async function validateUserSession(session: UserSession | null): Promise<UserSession | null> {
+  if (!session) return null;
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        department: true,
+        tokenVersion: true,
+      },
+    });
+
+    if (!user) return null;
+    if (user.tokenVersion !== (session.tokenVersion ?? 0)) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role as 'ADMIN' | 'MEMBER',
+      department: user.department,
+      tokenVersion: user.tokenVersion,
+    };
+  } catch (error) {
+    console.error('[Auth Service] Failed to validate user session against database:', error);
     return null;
   }
 }
@@ -49,18 +86,14 @@ export async function getSessionUser(): Promise<UserSession | null> {
   const cookieStore = cookies();
   const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
   if (!token) return null;
-  return verifySessionToken(token);
+  const session = await verifySessionToken(token);
+  return validateUserSession(session);
 }
 
 export async function getSessionUserFromRequest(request: NextRequest): Promise<UserSession | null> {
+  // VULN-11: Authentication is strictly cookie-based. Do not accept Authorization: Bearer headers.
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
-  if (!token) {
-    const authHeader = request.headers.get('Authorization');
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const bearerToken = authHeader.substring(7);
-      return verifySessionToken(bearerToken);
-    }
-    return null;
-  }
-  return verifySessionToken(token);
+  if (!token) return null;
+  const session = await verifySessionToken(token);
+  return validateUserSession(session);
 }

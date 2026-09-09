@@ -33,6 +33,7 @@ export interface UserSession {
   email: string;
   role: Role;
   department?: string | null;
+  tokenVersion?: number;
 }
 
 export interface LeadItem {

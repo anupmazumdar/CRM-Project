@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/database/prisma';
 import { getSessionUserFromRequest } from '@/security/auth';
+import { logSecurityEvent } from '@/security/audit';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,6 +89,8 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       );
     }
 
+    const roleChanged = Boolean(role && role !== targetUser.role);
+
     const updatedUser = await prisma.user.update({
       where: { id },
       data: {
@@ -104,6 +107,19 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         createdAt: true,
       },
     });
+
+    if (roleChanged) {
+      logSecurityEvent({
+        type: 'ROLE_CHANGED',
+        adminId: session.id,
+        adminEmail: session.email,
+        targetUserId: targetUser.id,
+        targetEmail: targetUser.email,
+        previousRole: targetUser.role,
+        newRole: role,
+        details: `Role changed from ${targetUser.role} to ${role} by Admin ${session.email} (${session.id})`,
+      });
+    }
 
     return NextResponse.json({
       success: true,

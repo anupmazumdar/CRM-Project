@@ -42,7 +42,7 @@ export function isValidSameOrigin(request: NextRequest): boolean {
     }
   }
 
-  // If neither Origin nor Referer is set (e.g. programmatic server-to-server or test runners)
-  // allow request to proceed. Browsers will always supply Origin or Referer for cross-origin mutations.
-  return true;
+  // VULN-09: Deny by default when both Origin and Referer headers are absent.
+  // Cookie-authenticated mutating requests must provide a valid same-origin header.
+  return false;
 }

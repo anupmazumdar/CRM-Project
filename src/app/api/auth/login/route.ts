@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
       email: user.email,
       role: user.role as 'ADMIN' | 'MEMBER',
       department: user.department,
+      tokenVersion: user.tokenVersion,
     };
 
     const token = await createSessionToken(sessionUser);

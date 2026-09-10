@@ -1,5 +1,5 @@
 export type Role = 'ADMIN' | 'MEMBER';
-
+// edited by me using fork
 export type LeadStatus =
   | 'New'
   | 'Contacted'

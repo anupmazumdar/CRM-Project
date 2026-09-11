@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import { UserSession } from '@/backend/types';
-import { prisma } from '@/database/prisma';
+import { prisma, withQueryTimeout } from '@/database/prisma';
 
 export const AUTH_COOKIE_NAME = 'xyz_crm_token';
 
@@ -51,17 +51,21 @@ export async function verifySessionToken(token: string): Promise<UserSession | n
 async function validateUserSession(session: UserSession | null): Promise<UserSession | null> {
   if (!session) return null;
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: session.id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        department: true,
-        tokenVersion: true,
-      },
-    });
+    const user = await withQueryTimeout(
+      prisma.user.findUnique({
+        where: { id: session.id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          department: true,
+          tokenVersion: true,
+        },
+      }),
+      5000,
+      'validateUserSession'
+    );
 
     if (!user) return null;
     if (user.tokenVersion !== (session.tokenVersion ?? 0)) {

@@ -9,11 +9,12 @@ const PUBLIC_PATHS = ['/login', '/api/auth/login'];
 
 function generateCspHeader(nonce: string): string {
   const isProd = process.env.NODE_ENV === 'production';
-  // VULN-07: In production, remove unsafe-eval and use strict nonce-based policy.
-  // In development, Next.js Fast Refresh / HMR requires unsafe-eval for source maps.
+  // VULN-07: In production, preserve nonce along with 'self' and 'unsafe-inline'.
+  // We omit 'strict-dynamic' because Next.js App Router pre-rendered static chunks
+  // are built ahead of time and do not include dynamic request nonces in their script tags.
   const scriptSrc = isProd
-    ? `'self' 'nonce-${nonce}' 'strict-dynamic'`
-    : `'self' 'unsafe-eval' 'nonce-${nonce}'`;
+    ? `'self' 'unsafe-inline' 'nonce-${nonce}'`
+    : `'self' 'unsafe-eval' 'unsafe-inline' 'nonce-${nonce}'`;
 
   return `
     default-src 'self';
@@ -25,7 +26,7 @@ function generateCspHeader(nonce: string): string {
     base-uri 'self';
     form-action 'self';
     frame-ancestors 'none';
-    connect-src 'self';
+    connect-src 'self' https:;
     upgrade-insecure-requests;
   `
     .replace(/\s{2,}/g, ' ')

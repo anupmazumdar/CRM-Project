@@ -26,21 +26,39 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       return;
     }
 
-    fetch('/api/auth/me')
-      .then((res) => res.json())
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.warn('[AppLayout] Auth check timed out after 8 seconds. Aborting request.');
+      controller.abort();
+    }, 8000);
+
+    fetch('/api/auth/me', { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`Authentication check failed (HTTP ${res.status})`);
+        }
+        return res.json();
+      })
       .then((data) => {
-        if (data.user) {
+        if (data && data.user) {
           setCurrentUser(data.user);
         } else {
           router.push('/login');
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        console.warn('[AppLayout] Authentication error or timeout, redirecting to /login:', err);
         router.push('/login');
       })
       .finally(() => {
+        clearTimeout(timeoutId);
         setIsLoadingAuth(false);
       });
+
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, [pathname, router]);
 
   const handleLeadCreated = (newLead: LeadItem) => {

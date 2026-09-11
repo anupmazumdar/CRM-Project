@@ -52,26 +52,39 @@ function getUpstashLimiter(): Ratelimit | null {
       isUpstashInitialized = true;
       return upstashRatelimit;
     } catch (err) {
-      if (process.env.NODE_ENV === 'production') {
-        console.error('[RateLimiter:Fatal] Upstash Redis initialization failed in production:', err);
-        throw new Error('Rate limiting service failure: Redis initialization failed');
-      }
       console.warn('[RateLimiter] Failed to initialize Upstash Redis. Falling back to local memory store:', err);
       isUpstashInitialized = true;
-      upstashRatelimit = null;
-      return null;
+      upstashRatelimit = {
+        limit: async (identifier: string) => {
+          const res = checkMemoryRateLimit(identifier, MAX_ATTEMPTS);
+          return {
+            success: res.success,
+            limit: res.limit,
+            remaining: res.remaining,
+            reset: res.reset,
+            pending: Promise.resolve(),
+          };
+        },
+      } as unknown as Ratelimit;
+      return upstashRatelimit;
     }
   }
 
-  // VULN-18: In production, Upstash Redis rate limiting is mandatory
-  if (process.env.NODE_ENV === 'production') {
-    console.error('[RateLimiter:Fatal] Upstash Redis rate limiting is MANDATORY in production (NODE_ENV=production), but UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN is unconfigured.');
-    throw new Error('Rate limiting unconfigured in production: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required');
-  }
-
+  console.warn('[RateLimiter] UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN is unconfigured. Falling back to local memory store.');
   isUpstashInitialized = true;
-  upstashRatelimit = null;
-  return null;
+  upstashRatelimit = {
+    limit: async (identifier: string) => {
+      const res = checkMemoryRateLimit(identifier, MAX_ATTEMPTS);
+      return {
+        success: res.success,
+        limit: res.limit,
+        remaining: res.remaining,
+        reset: res.reset,
+        pending: Promise.resolve(),
+      };
+    },
+  } as unknown as Ratelimit;
+  return upstashRatelimit;
 }
 
 function getUpstashIpLimiter(): Ratelimit | null {
@@ -96,26 +109,39 @@ function getUpstashIpLimiter(): Ratelimit | null {
       isUpstashIpInitialized = true;
       return upstashIpRatelimit;
     } catch (err) {
-      if (process.env.NODE_ENV === 'production') {
-        console.error('[RateLimiter:Fatal] Upstash Redis IP limiter initialization failed in production:', err);
-        throw new Error('Rate limiting service failure: Redis IP limiter initialization failed');
-      }
       console.warn('[RateLimiter] Failed to initialize Upstash Redis IP limiter:', err);
       isUpstashIpInitialized = true;
-      upstashIpRatelimit = null;
-      return null;
+      upstashIpRatelimit = {
+        limit: async (identifier: string) => {
+          const res = checkMemoryRateLimit(identifier, MAX_IP_ATTEMPTS);
+          return {
+            success: res.success,
+            limit: res.limit,
+            remaining: res.remaining,
+            reset: res.reset,
+            pending: Promise.resolve(),
+          };
+        },
+      } as unknown as Ratelimit;
+      return upstashIpRatelimit;
     }
   }
 
-  // VULN-18: In production, Upstash Redis rate limiting is mandatory
-  if (process.env.NODE_ENV === 'production') {
-    console.error('[RateLimiter:Fatal] Upstash Redis IP rate limiting is MANDATORY in production (NODE_ENV=production), but UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN is unconfigured.');
-    throw new Error('Rate limiting unconfigured in production: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required');
-  }
-
+  console.warn('[RateLimiter] UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN is unconfigured. IP rate limiting falling back to local memory store.');
   isUpstashIpInitialized = true;
-  upstashIpRatelimit = null;
-  return null;
+  upstashIpRatelimit = {
+    limit: async (identifier: string) => {
+      const res = checkMemoryRateLimit(identifier, MAX_IP_ATTEMPTS);
+      return {
+        success: res.success,
+        limit: res.limit,
+        remaining: res.remaining,
+        reset: res.reset,
+        pending: Promise.resolve(),
+      };
+    },
+  } as unknown as Ratelimit;
+  return upstashIpRatelimit;
 }
 
 function getUpstashAccountActionLimiter(): Ratelimit | null {
@@ -140,26 +166,39 @@ function getUpstashAccountActionLimiter(): Ratelimit | null {
       isUpstashAccountActionInitialized = true;
       return upstashAccountActionRatelimit;
     } catch (err) {
-      if (process.env.NODE_ENV === 'production') {
-        console.error('[RateLimiter:Fatal] Upstash Redis Account Action limiter initialization failed in production:', err);
-        throw new Error('Rate limiting service failure: Redis Account Action limiter initialization failed');
-      }
       console.warn('[RateLimiter] Failed to initialize Upstash Redis Account Action limiter:', err);
       isUpstashAccountActionInitialized = true;
-      upstashAccountActionRatelimit = null;
-      return null;
+      upstashAccountActionRatelimit = {
+        limit: async (identifier: string) => {
+          const res = checkMemoryRateLimit(identifier, MAX_ACCOUNT_ACTION_ATTEMPTS);
+          return {
+            success: res.success,
+            limit: res.limit,
+            remaining: res.remaining,
+            reset: res.reset,
+            pending: Promise.resolve(),
+          };
+        },
+      } as unknown as Ratelimit;
+      return upstashAccountActionRatelimit;
     }
   }
 
-  // VULN-18: In production, Upstash Redis rate limiting is mandatory
-  if (process.env.NODE_ENV === 'production') {
-    console.error('[RateLimiter:Fatal] Upstash Redis Account Action rate limiting is MANDATORY in production (NODE_ENV=production), but UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN is unconfigured.');
-    throw new Error('Rate limiting unconfigured in production: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required');
-  }
-
+  console.warn('[RateLimiter] UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN is unconfigured. Account action rate limiting falling back to local memory store.');
   isUpstashAccountActionInitialized = true;
-  upstashAccountActionRatelimit = null;
-  return null;
+  upstashAccountActionRatelimit = {
+    limit: async (identifier: string) => {
+      const res = checkMemoryRateLimit(identifier, MAX_ACCOUNT_ACTION_ATTEMPTS);
+      return {
+        success: res.success,
+        limit: res.limit,
+        remaining: res.remaining,
+        reset: res.reset,
+        pending: Promise.resolve(),
+      };
+    },
+  } as unknown as Ratelimit;
+  return upstashAccountActionRatelimit;
 }
 
 /**

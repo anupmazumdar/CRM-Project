@@ -9,12 +9,15 @@ const PUBLIC_PATHS = ['/login', '/api/auth/login'];
 
 function generateCspHeader(nonce: string): string {
   const isProd = process.env.NODE_ENV === 'production';
-  // VULN-07: In production, preserve nonce along with 'self' and 'unsafe-inline'.
-  // We omit 'strict-dynamic' because Next.js App Router pre-rendered static chunks
-  // are built ahead of time and do not include dynamic request nonces in their script tags.
+  // VULN-07: Allow 'self' and 'unsafe-inline' for Next.js App Router static chunks and streaming flight scripts.
+  // We MUST NOT include 'nonce-...' in script-src because per the W3C CSP Level 2/3 specification,
+  // the presence of ANY nonce forces modern browsers (Chrome/Edge/Firefox/Safari) to completely ignore 'unsafe-inline'.
+  // Since Next.js App Router injects hydration and streaming flight payload scripts (<script>(self.__next_f=...)</script>)
+  // as inline scripts without nonce attributes, any nonce in script-src causes the browser to block all Next.js
+  // hydration scripts, crashing React with Minified Error #412 and freezing the entire application on the SSR skeleton.
   const scriptSrc = isProd
-    ? `'self' 'unsafe-inline' 'nonce-${nonce}'`
-    : `'self' 'unsafe-eval' 'unsafe-inline' 'nonce-${nonce}'`;
+    ? `'self' 'unsafe-inline'`
+    : `'self' 'unsafe-eval' 'unsafe-inline'`;
 
   return `
     default-src 'self';

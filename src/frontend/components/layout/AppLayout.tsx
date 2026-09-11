@@ -28,9 +28,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
-      console.warn('[AppLayout] Auth check timed out after 8 seconds. Aborting request.');
+      console.warn('[AppLayout] Auth check timed out after 5 seconds. Redirecting to /login.');
       controller.abort();
-    }, 8000);
+      window.location.href = '/login';
+    }, 5000);
 
     fetch('/api/auth/me', { signal: controller.signal })
       .then((res) => {
@@ -43,12 +44,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         if (data && data.user) {
           setCurrentUser(data.user);
         } else {
-          router.push('/login');
+          window.location.href = '/login';
         }
       })
       .catch((err) => {
         console.warn('[AppLayout] Authentication error or timeout, redirecting to /login:', err);
-        router.push('/login');
+        window.location.href = '/login';
       })
       .finally(() => {
         clearTimeout(timeoutId);
